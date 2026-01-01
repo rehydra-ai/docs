@@ -1,0 +1,206 @@
+---
+title: "Anonymization Pipeline"
+description: "How Rehydra processes text to detect and replace PII"
+---
+
+Understanding the anonymization pipeline helps you configure Rehydra optimally for your use case.
+
+## Pipeline Overview
+
+```
+Input Text
+    │
+    ▼
+┌──────────────────┐
+│  Pre-normalize   │  Standardize whitespace, normalize unicode
+└────────┬─────────┘
+         │
+    ┌────┴────┐
+    ▼         ▼
+┌────────┐ ┌──────┐
+│  Regex │ │  NER │  Parallel detection
+│  Pass  │ │  Pass│
+└────┬───┘ └───┬──┘
+     │         │
+     └────┬────┘
+          ▼
+┌──────────────────┐
+│  Resolve Spans   │  Merge overlaps, apply priorities
+└────────┬─────────┘
+         │
+         ▼
+┌──────────────────┐
+│ Title Extraction │  Strip honorifics (Dr., Mrs., etc.)
+└────────┬─────────┘
+         │
+         ▼
+┌──────────────────┐
+│    Semantics     │  Add gender/scope attributes
+└────────┬─────────┘
+         │
+         ▼
+┌──────────────────┐
+│   Tag Entities   │  Replace with <PII .../> tags
+└────────┬─────────┘
+         │
+         ▼
+┌──────────────────┐
+│    Validation    │  Leak scan, format check
+└────────┬─────────┘
+         │
+         ▼
+┌──────────────────┐
+│    Encryption    │  AES-256-GCM encrypt PII map
+└────────┬─────────┘
+         │
+         ▼
+    Output Result
+```
+
+## Stage Details
+
+### 1. Pre-normalization
+
+Standardizes input text for consistent detection:
+
+- Normalizes unicode characters (NFKC normalization)
+- Standardizes whitespace (multiple spaces → single space)
+- Preserves original positions for accurate tagging
+
+### 2. Regex Detection
+
+Fast pattern matching for structured PII:
+
+- Runs all enabled recognizers in parallel
+- Validates matches (e.g., Luhn check for credit cards, IBAN checksums)
+- Returns spans with 100% confidence
+
+### 3. NER Detection
+
+Neural network inference for soft PII:
+
+- Tokenizes text using WordPiece
+- Runs ONNX inference
+- Decodes BIO tags to spans
+- Returns spans with confidence scores
+
+### 4. Span Resolution
+
+Merges and prioritizes overlapping detections:
+
+```typescript
+// Example: overlapping EMAIL and URL
+"Contact: mailto:john@example.com"
+         ├──────── URL ────────┤
+                  ├── EMAIL ──┤
+
+// Resolution: EMAIL has higher priority → EMAIL wins
+```
+
+Resolution rules:
+1. Higher priority type wins (see [PII Types](/concepts/pii-types))
+2. For same type: higher confidence wins
+3. For exact ties: regex detection wins over NER
+
+### 5. Title Extraction
+
+When semantic enrichment is enabled, honorific titles are extracted:
+
+```
+"Dr. Maria Schmidt" → "Dr. <PII type="PERSON" gender="female" id="1"/>"
+```
+
+Titles remain visible (for translation) while the name is protected.
+
+### 6. Semantic Enrichment
+
+Adds attributes for better translation context:
+
+| Attribute | Type | Values | Purpose |
+|-----------|------|--------|---------|
+| `gender` | PERSON | male, female, neutral | Grammatical agreement |
+| `scope` | LOCATION | city, country, region | Preposition selection |
+
+Example output:
+```xml
+<PII type="PERSON" gender="female" id="1"/>
+<PII type="LOCATION" scope="city" id="2"/>
+```
+
+### 7. Entity Tagging
+
+Replaces detected spans with placeholder tags:
+
+- Assigns unique IDs per type
+- Builds PII map (ID → original value)
+- Supports ID reuse for repeated values
+
+### 8. Validation
+
+Optional output validation:
+
+- **Leak Scan**: Checks if any original PII appears in output
+- **Format Check**: Validates tag structure
+- **Warnings**: Logs issues without blocking
+
+### 9. Encryption
+
+Secures the PII map using AES-256-GCM:
+
+```typescript
+{
+  ciphertext: "...",  // Encrypted map data
+  iv: "...",          // Initialization vector
+  authTag: "..."      // Authentication tag
+}
+```
+
+## Performance Characteristics
+
+| Stage | Time (2K chars) | Notes |
+|-------|-----------------|-------|
+| Regex pass | ~5 ms | All recognizers |
+| NER inference | ~100-150 ms | Quantized model |
+| Semantic enrichment | ~1-2 ms | After data loaded |
+| **Total pipeline** | **~150-200 ms** | Full anonymization |
+
+## Configuration Impact
+
+### Regex-Only Mode
+
+Skip NER for maximum speed:
+
+```typescript
+import { anonymizeRegexOnly } from 'rehydra';
+
+const result = await anonymizeRegexOnly(text);
+// ~5-10ms per call
+```
+
+### Full Pipeline
+
+Enable all features:
+
+```typescript
+const anonymizer = createAnonymizer({
+  ner: { mode: 'quantized' },
+  semantic: { enabled: true },
+  defaultPolicy: {
+    enableLeakScan: true,
+    enableSemanticMasking: true,
+  }
+});
+// ~150-200ms per call
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Encryption" icon="lock" href="/concepts/encryption">
+    Learn about PII map encryption
+  </Card>
+  <Card title="NER Detection" icon="brain" href="/guides/ner-detection">
+    Configure the NER model
+  </Card>
+</CardGroup>
+

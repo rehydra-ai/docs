@@ -1,0 +1,142 @@
+---
+title: "Installation"
+description: "Install Rehydra for Node.js, Bun, or browsers"
+---
+
+## Node.js
+
+Install the package from npm:
+
+```bash
+npm install rehydra
+```
+
+The NER model requires `onnxruntime-node`, which is included as an optional dependency and will be installed automatically on supported platforms.
+
+### SQLite Storage (Optional)
+
+For persistent PII map storage with SQLite:
+
+```bash
+npm install better-sqlite3
+```
+
+## Bun
+
+Bun requires `onnxruntime-web` since `onnxruntime-node` is a native Node.js addon:
+
+```bash
+bun add rehydra onnxruntime-web
+```
+
+Usage is identical to Node.js — the library auto-detects the runtime.
+
+## Browser (with Bundler)
+
+When using Vite, webpack, esbuild, or other modern bundlers:
+
+```bash
+npm install rehydra onnxruntime-web
+```
+
+The browser-safe entry point is automatically selected via [conditional exports](https://nodejs.org/api/packages.html#conditional-exports). This entry point excludes Node.js-specific modules like SQLite storage.
+
+### Vite Configuration
+
+No special configuration needed. Vite automatically resolves the browser build.
+
+### Webpack Configuration
+
+No special configuration needed. Webpack 5+ resolves conditional exports correctly.
+
+## Browser (without Bundler)
+
+For direct browser usage without a bundler:
+
+```html
+<script type="module">
+  // Import directly from your dist folder or CDN
+  import { createAnonymizer } from './node_modules/rehydra/dist/browser.js';
+  
+  // onnxruntime-web is automatically loaded from CDN when needed
+</script>
+```
+
+## Conditional Exports
+
+The package uses conditional exports to provide the right build for each environment:
+
+```json
+{
+  "exports": {
+    ".": {
+      "browser": "./dist/browser.js",
+      "node": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  }
+}
+```
+
+### Explicit Imports
+
+If needed, you can explicitly import a specific build:
+
+```typescript
+// Browser-only build (excludes SQLite, Node.js fs, etc.)
+import { createAnonymizer } from 'rehydra/browser';
+
+// Node.js build (includes everything)
+import { createAnonymizer, SQLitePIIStorageProvider } from 'rehydra/node';
+
+// SQLite storage only (Node.js only)
+import { SQLitePIIStorageProvider } from 'rehydra/storage/sqlite';
+```
+
+## What's Included
+
+### Browser Build Includes
+
+- All recognizers (email, phone, IBAN, credit card, etc.)
+- NER model support (with `onnxruntime-web`)
+- Semantic enrichment
+- `InMemoryPIIStorageProvider`
+- `IndexedDBPIIStorageProvider`
+- All crypto utilities
+
+### Browser Build Excludes
+
+- `SQLitePIIStorageProvider` (use `IndexedDBPIIStorageProvider` instead)
+- Node.js `fs`, `path`, `os` modules
+
+## Requirements
+
+| Environment | Version | Notes |
+|-------------|---------|-------|
+| Node.js | ≥ 18.0.0 | Uses native `onnxruntime-node` |
+| Bun | ≥ 1.0.0 | Requires `onnxruntime-web` |
+| Browsers | Chrome 86+, Firefox 89+, Safari 15.4+, Edge 86+ | Uses OPFS for model storage |
+
+## Verifying Installation
+
+```typescript
+import { anonymizeRegexOnly } from 'rehydra';
+
+const result = await anonymizeRegexOnly('Contact: test@example.com');
+console.log(result.anonymizedText);
+// "Contact: <PII type="EMAIL" id="1"/>"
+```
+
+If you see the anonymized output, installation is complete!
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Quick Start" icon="play" href="/quickstart">
+    Learn the basics of using Rehydra
+  </Card>
+  <Card title="NER Detection" icon="brain" href="/guides/ner-detection">
+    Set up the NER model for detecting names and locations
+  </Card>
+</CardGroup>
+

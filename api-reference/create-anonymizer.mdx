@@ -1,0 +1,204 @@
+---
+title: "createAnonymizer"
+description: "Create a reusable anonymizer instance"
+---
+
+Creates and configures an anonymizer instance for PII detection and replacement.
+
+## Signature
+
+```typescript
+function createAnonymizer(config?: AnonymizerConfig): Anonymizer
+```
+
+## Parameters
+
+### config (optional)
+
+<ParamField path="ner" type="NERConfig">
+  NER model configuration
+  
+  <Expandable title="NERConfig properties">
+    <ParamField path="mode" type="string" required>
+      Model mode: `'disabled'` | `'quantized'` | `'standard'` | `'custom'`
+    </ParamField>
+    <ParamField path="modelPath" type="string">
+      Custom model path (required when mode is `'custom'`)
+    </ParamField>
+    <ParamField path="vocabPath" type="string">
+      Custom vocab path (required when mode is `'custom'`)
+    </ParamField>
+    <ParamField path="autoDownload" type="boolean" default="true">
+      Auto-download model if not present
+    </ParamField>
+    <ParamField path="thresholds" type="Record<PIIType, number>">
+      Confidence thresholds per PII type (0.0-1.0)
+    </ParamField>
+    <ParamField path="onStatus" type="(status: string) => void">
+      Status message callback
+    </ParamField>
+    <ParamField path="onDownloadProgress" type="DownloadProgressCallback">
+      Download progress callback
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField path="semantic" type="SemanticConfig">
+  Semantic enrichment configuration
+  
+  <Expandable title="SemanticConfig properties">
+    <ParamField path="enabled" type="boolean" default="false">
+      Enable semantic enrichment (gender/scope attributes)
+    </ParamField>
+    <ParamField path="autoDownload" type="boolean" default="true">
+      Auto-download semantic data if not present
+    </ParamField>
+    <ParamField path="onStatus" type="(status: string) => void">
+      Status message callback
+    </ParamField>
+    <ParamField path="onDownloadProgress" type="DownloadProgressCallback">
+      Download progress callback
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField path="keyProvider" type="KeyProvider">
+  Encryption key provider. If not provided, generates a random key.
+</ParamField>
+
+<ParamField path="piiStorageProvider" type="PIIStorageProvider">
+  Storage provider for session-based PII map persistence
+</ParamField>
+
+<ParamField path="defaultPolicy" type="AnonymizationPolicy">
+  Default anonymization policy
+</ParamField>
+
+<ParamField path="registry" type="RecognizerRegistry">
+  Custom recognizer registry (uses default if not provided)
+</ParamField>
+
+## Returns
+
+An `Anonymizer` instance with these methods:
+
+| Method | Description |
+|--------|-------------|
+| `initialize()` | Initialize the anonymizer (loads models) |
+| `anonymize(text, locale?, policy?)` | Anonymize text |
+| `session(sessionId)` | Create a session for persistent storage |
+| `dispose()` | Release resources |
+| `getRegistry()` | Get the recognizer registry |
+| `getNERModel()` | Get the NER model instance |
+| `isInitialized` | Check if initialized |
+
+## Examples
+
+### Basic (Regex Only)
+
+```typescript
+import { createAnonymizer } from 'rehydra';
+
+const anonymizer = createAnonymizer();
+await anonymizer.initialize();
+
+const result = await anonymizer.anonymize('Contact: test@example.com');
+console.log(result.anonymizedText);
+// "Contact: <PII type="EMAIL" id="1"/>"
+
+await anonymizer.dispose();
+```
+
+### With NER
+
+```typescript
+const anonymizer = createAnonymizer({
+  ner: { 
+    mode: 'quantized',
+    onStatus: (status) => console.log(status)
+  }
+});
+
+await anonymizer.initialize();
+
+const result = await anonymizer.anonymize('Hello John Smith!');
+// "Hello <PII type="PERSON" id="1"/>!"
+```
+
+### With Semantic Enrichment
+
+```typescript
+const anonymizer = createAnonymizer({
+  ner: { mode: 'quantized' },
+  semantic: { enabled: true }
+});
+
+await anonymizer.initialize();
+
+const result = await anonymizer.anonymize('Contact Maria in Berlin');
+// "Contact <PII type="PERSON" gender="female" id="1"/> in <PII type="LOCATION" scope="city" id="2"/>"
+```
+
+### With Storage
+
+```typescript
+import { 
+  createAnonymizer,
+  InMemoryKeyProvider,
+  SQLitePIIStorageProvider 
+} from 'rehydra';
+
+const storage = new SQLitePIIStorageProvider('./pii.db');
+await storage.initialize();
+
+const anonymizer = createAnonymizer({
+  ner: { mode: 'quantized' },
+  keyProvider: new InMemoryKeyProvider(),
+  piiStorageProvider: storage,
+});
+
+await anonymizer.initialize();
+
+// Use sessions for automatic persistence
+const session = anonymizer.session('chat-123');
+await session.anonymize('Hello John!');
+```
+
+### With Custom Thresholds
+
+```typescript
+import { createAnonymizer, PIIType } from 'rehydra';
+
+const anonymizer = createAnonymizer({
+  ner: { 
+    mode: 'quantized',
+    thresholds: {
+      [PIIType.PERSON]: 0.8,
+      [PIIType.ORG]: 0.7,
+    }
+  }
+});
+```
+
+### With Custom Policy
+
+```typescript
+import { createAnonymizer, PIIType, createDefaultPolicy } from 'rehydra';
+
+const policy = createDefaultPolicy();
+policy.enabledTypes = new Set([PIIType.EMAIL, PIIType.PHONE, PIIType.PERSON]);
+policy.allowlistTerms = new Set(['Support Team', 'Help Desk']);
+policy.enableLeakScan = true;
+
+const anonymizer = createAnonymizer({
+  ner: { mode: 'quantized' },
+  defaultPolicy: policy,
+});
+```
+
+## Related
+
+- [anonymize](/api-reference/anonymize) - The anonymize method
+- [Sessions](/api-reference/sessions) - Session-based persistence
+- [Storage Providers](/api-reference/storage-providers) - Available storage options
+

@@ -1,33 +1,174 @@
 ---
-title: 'Introduction'
-description: 'Example section for showcasing API endpoints'
+title: "API Reference"
+description: "Complete API documentation for Rehydra"
 ---
 
-<Note>
-  If you're not looking to build API reference documentation, you can delete
-  this section by removing the api-reference folder.
-</Note>
+This section provides detailed documentation for all Rehydra exports.
 
-## Welcome
+## Core Functions
 
-There are two ways to build API documentation: [OpenAPI](https://mintlify.com/docs/api-playground/openapi/setup) and [MDX components](https://mintlify.com/docs/api-playground/mdx/configuration). For the starter kit, we are using the following OpenAPI specification.
+<CardGroup cols={2}>
+  <Card title="createAnonymizer" icon="plus" href="/api-reference/create-anonymizer">
+    Create a reusable anonymizer instance with configuration
+  </Card>
+  <Card title="anonymize" icon="mask" href="/api-reference/anonymize">
+    Anonymize text and get the result with encrypted PII map
+  </Card>
+  <Card title="rehydrate" icon="rotate-left" href="/api-reference/rehydrate">
+    Restore original values from anonymized text
+  </Card>
+</CardGroup>
 
-<Card
-  title="Plant Store Endpoints"
-  icon="leaf"
-  href="https://github.com/mintlify/starter/blob/main/api-reference/openapi.json"
->
-  View the OpenAPI specification file
-</Card>
+## Storage
 
-## Authentication
+<CardGroup cols={2}>
+  <Card title="Storage Providers" icon="database" href="/api-reference/storage-providers">
+    SQLite, IndexedDB, and in-memory storage
+  </Card>
+  <Card title="Sessions" icon="comments" href="/api-reference/sessions">
+    Session-based PII map persistence
+  </Card>
+</CardGroup>
 
-All API endpoints are authenticated using Bearer tokens and picked up from the specification file.
+## Utilities
 
-```json
-"security": [
-  {
-    "bearerAuth": []
-  }
-]
+<CardGroup cols={2}>
+  <Card title="Crypto" icon="lock" href="/api-reference/crypto">
+    Encryption, key management, and utilities
+  </Card>
+  <Card title="Model Management" icon="brain" href="/api-reference/model-management">
+    Download, cache, and manage NER models
+  </Card>
+</CardGroup>
+
+## Quick Reference
+
+### Main Entry Points
+
+```typescript
+import { 
+  // Factory function
+  createAnonymizer,
+  
+  // Convenience functions
+  anonymize,
+  anonymizeRegexOnly,
+  anonymizeWithNER,
+  
+  // Rehydration
+  rehydrate,
+  decryptPIIMap,
+  
+  // Key providers
+  InMemoryKeyProvider,
+  ConfigKeyProvider,
+  
+  // Storage providers
+  InMemoryPIIStorageProvider,
+  SQLitePIIStorageProvider,      // Node.js only
+  IndexedDBPIIStorageProvider,   // Browser only
+  
+  // Types
+  PIIType,
+  type AnonymizationResult,
+  type AnonymizationPolicy,
+} from 'rehydra';
+```
+
+### Result Structure
+
+```typescript
+interface AnonymizationResult {
+  // Text with PII replaced
+  anonymizedText: string;
+  
+  // Detected entities (without originals)
+  entities: Array<{
+    type: PIIType;
+    id: number;
+    start: number;
+    end: number;
+    confidence: number;
+    source: 'REGEX' | 'NER';
+  }>;
+  
+  // Encrypted PII map
+  piiMap: {
+    ciphertext: string;
+    iv: string;
+    authTag: string;
+  };
+  
+  // Statistics
+  stats: {
+    countsByType: Record<PIIType, number>;
+    totalEntities: number;
+    processingTimeMs: number;
+    modelVersion: string;
+    leakScanPassed?: boolean;
+  };
+}
+```
+
+### Configuration
+
+```typescript
+interface AnonymizerConfig {
+  // NER model configuration
+  ner?: {
+    mode: 'disabled' | 'quantized' | 'standard' | 'custom';
+    modelPath?: string;
+    vocabPath?: string;
+    autoDownload?: boolean;
+    thresholds?: Partial<Record<PIIType, number>>;
+    onStatus?: (status: string) => void;
+    onDownloadProgress?: (progress: DownloadProgress) => void;
+  };
+  
+  // Semantic enrichment
+  semantic?: {
+    enabled: boolean;
+    autoDownload?: boolean;
+    onStatus?: (status: string) => void;
+    onDownloadProgress?: (progress: DownloadProgress) => void;
+  };
+  
+  // Encryption key provider
+  keyProvider?: KeyProvider;
+  
+  // Storage for sessions
+  piiStorageProvider?: PIIStorageProvider;
+  
+  // Default anonymization policy
+  defaultPolicy?: AnonymizationPolicy;
+}
+```
+
+### Policy Options
+
+```typescript
+interface AnonymizationPolicy {
+  // Types to detect
+  enabledTypes: Set<PIIType>;
+  regexEnabledTypes: Set<PIIType>;
+  nerEnabledTypes: Set<PIIType>;
+  
+  // Confidence thresholds
+  confidenceThresholds: Map<PIIType, number>;
+  
+  // Type priority for overlaps
+  typePriority: PIIType[];
+  
+  // Allowlist (never anonymize)
+  allowlistTerms: Set<string>;
+  
+  // ID reuse for repeated values
+  reuseIdsForRepeatedPII: boolean;
+  
+  // Validation
+  enableLeakScan: boolean;
+  
+  // Semantic attributes
+  enableSemanticMasking: boolean;
+}
 ```

@@ -1,0 +1,252 @@
+---
+title: "Anonymize Functions"
+description: "Functions for anonymizing text"
+---
+
+Rehydra provides several functions for anonymizing text, from simple one-off calls to reusable instances.
+
+## anonymizer.anonymize()
+
+The primary method on an `Anonymizer` instance.
+
+### Signature
+
+```typescript
+anonymize(
+  text: string,
+  locale?: string,
+  policy?: Partial<AnonymizationPolicy>
+): Promise<AnonymizationResult>
+```
+
+### Parameters
+
+<ParamField path="text" type="string" required>
+  The text to anonymize
+</ParamField>
+
+<ParamField path="locale" type="string">
+  Locale hint (e.g., `'de-DE'`, `'en-US'`). Helps with semantic enrichment.
+</ParamField>
+
+<ParamField path="policy" type="Partial<AnonymizationPolicy>">
+  Policy override for this call. Merged with default policy.
+</ParamField>
+
+### Returns
+
+```typescript
+interface AnonymizationResult {
+  anonymizedText: string;
+  entities: Array<{
+    type: PIIType;
+    id: number;
+    start: number;
+    end: number;
+    confidence: number;
+    source: 'REGEX' | 'NER';
+    gender?: 'male' | 'female' | 'neutral';
+    scope?: 'city' | 'country' | 'region';
+  }>;
+  piiMap: {
+    ciphertext: string;
+    iv: string;
+    authTag: string;
+  };
+  stats: {
+    countsByType: Record<PIIType, number>;
+    totalEntities: number;
+    processingTimeMs: number;
+    modelVersion: string;
+    leakScanPassed?: boolean;
+  };
+}
+```
+
+### Example
+
+```typescript
+const anonymizer = createAnonymizer({
+  ner: { mode: 'quantized' }
+});
+await anonymizer.initialize();
+
+const result = await anonymizer.anonymize(
+  'Contact John at john@example.com',
+  'en-US'
+);
+
+console.log(result.anonymizedText);
+// "Contact <PII type="PERSON" id="1"/> at <PII type="EMAIL" id="1"/>"
+
+console.log(result.entities);
+// [
+//   { type: 'PERSON', id: 1, start: 8, end: 12, confidence: 0.95, source: 'NER' },
+//   { type: 'EMAIL', id: 1, start: 16, end: 32, confidence: 1.0, source: 'REGEX' }
+// ]
+
+console.log(result.stats);
+// { totalEntities: 2, processingTimeMs: 150, ... }
+```
+
+---
+
+## anonymize()
+
+Standalone function for one-off anonymization (regex-only by default).
+
+### Signature
+
+```typescript
+function anonymize(
+  text: string,
+  locale?: string,
+  policy?: Partial<AnonymizationPolicy>
+): Promise<AnonymizationResult>
+```
+
+### Example
+
+```typescript
+import { anonymize } from 'rehydra';
+
+const result = await anonymize('Email: test@example.com');
+console.log(result.anonymizedText);
+// "Email: <PII type="EMAIL" id="1"/>"
+```
+
+<Note>
+Creates a temporary anonymizer for each call. For multiple texts, use `createAnonymizer()` instead.
+</Note>
+
+---
+
+## anonymizeRegexOnly()
+
+Fast regex-only anonymization without NER.
+
+### Signature
+
+```typescript
+function anonymizeRegexOnly(
+  text: string,
+  policy?: Partial<AnonymizationPolicy>
+): Promise<AnonymizationResult>
+```
+
+### Example
+
+```typescript
+import { anonymizeRegexOnly } from 'rehydra';
+
+const result = await anonymizeRegexOnly(
+  'Card: 4111111111111111, IBAN: DE89370400440532013000'
+);
+
+console.log(result.anonymizedText);
+// "Card: <PII type="CREDIT_CARD" id="1"/>, IBAN: <PII type="IBAN" id="2"/>"
+```
+
+### Performance
+
+| Function | Time (2K chars) |
+|----------|-----------------|
+| `anonymizeRegexOnly()` | ~5-10 ms |
+| `anonymize()` with NER | ~150-200 ms |
+
+---
+
+## anonymizeWithNER()
+
+One-off anonymization with NER model.
+
+### Signature
+
+```typescript
+function anonymizeWithNER(
+  text: string,
+  nerConfig: Omit<NERConfig, 'mode'> & { mode?: 'standard' | 'quantized' },
+  policy?: Partial<AnonymizationPolicy>
+): Promise<AnonymizationResult>
+```
+
+### Example
+
+```typescript
+import { anonymizeWithNER } from 'rehydra';
+
+const result = await anonymizeWithNER(
+  'Hello John Smith from Acme Corp!',
+  { 
+    mode: 'quantized',
+    onStatus: console.log 
+  }
+);
+
+console.log(result.anonymizedText);
+// "Hello <PII type="PERSON" id="1"/> from <PII type="ORG" id="1"/>!"
+```
+
+<Warning>
+Downloads and loads the NER model on each call. For multiple texts, use `createAnonymizer()` instead.
+</Warning>
+
+---
+
+## Policy Overrides
+
+Override default policy for specific calls:
+
+```typescript
+import { createAnonymizer, PIIType } from 'rehydra';
+
+const anonymizer = createAnonymizer({
+  ner: { mode: 'quantized' }
+});
+await anonymizer.initialize();
+
+// Default behavior
+await anonymizer.anonymize('Email: test@example.com');
+
+// Override for this call only
+await anonymizer.anonymize('Email: test@example.com', undefined, {
+  enabledTypes: new Set([PIIType.PHONE]),  // Only detect phones
+  allowlistTerms: new Set(['test@example.com']),  // Ignore this email
+});
+```
+
+---
+
+## Handling Results
+
+### Access Anonymized Text
+
+```typescript
+const result = await anonymizer.anonymize(text);
+console.log(result.anonymizedText);
+```
+
+### Check Detection Stats
+
+```typescript
+if (result.stats.totalEntities === 0) {
+  console.log('No PII detected');
+}
+
+console.log(`Found ${result.stats.countsByType['EMAIL'] || 0} emails`);
+```
+
+### Validate Output
+
+```typescript
+if (!result.stats.leakScanPassed) {
+  console.warn('Potential PII leak detected in output');
+}
+```
+
+## Related
+
+- [createAnonymizer](/api-reference/create-anonymizer) - Create an anonymizer instance
+- [rehydrate](/api-reference/rehydrate) - Restore original values
+- [Sessions](/api-reference/sessions) - Session-based anonymization
+

@@ -1,80 +1,176 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+title: "Quick Start"
+description: "Get up and running with Rehydra in under 5 minutes"
 ---
 
-## Get started in three steps
+## Installation
 
-Get your documentation site running locally and make your first customization.
+<CodeGroup>
+```bash npm
+npm install rehydra
+```
 
-### Step 1: Set up your local environment
+```bash bun
+bun add rehydra onnxruntime-web
+```
 
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
-    
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
-    
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
+```bash pnpm
+pnpm add rehydra
+```
+</CodeGroup>
 
-### Step 2: Deploy your changes
+## Basic Usage
 
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
-    
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
+### Regex-Only Mode (No Downloads Required)
 
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
+For structured PII like emails, phones, IBANs, and credit cards:
 
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
+```typescript
+import { anonymizeRegexOnly } from 'rehydra';
 
-### Step 3: Go live
+const result = await anonymizeRegexOnly(
+  'Contact john@example.com or call +49 30 123456. IBAN: DE89370400440532013000'
+);
 
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
+console.log(result.anonymizedText);
+// "Contact <PII type="EMAIL" id="1"/> or call <PII type="PHONE" id="2"/>. IBAN: <PII type="IBAN" id="3"/>"
+```
 
-## Next steps
+### Full Mode with NER
 
-Now that you have your docs running, explore these key features:
+For detecting names, organizations, and locations, enable the NER model:
+
+```typescript
+import { createAnonymizer } from 'rehydra';
+
+const anonymizer = createAnonymizer({
+  ner: { 
+    mode: 'quantized',  // ~280 MB, auto-downloaded on first use
+    onStatus: (status) => console.log(status),
+  }
+});
+
+await anonymizer.initialize();
+
+const result = await anonymizer.anonymize(
+  'Hello John Smith from Acme Corp in Berlin!'
+);
+
+console.log(result.anonymizedText);
+// "Hello <PII type="PERSON" id="1"/> from <PII type="ORG" id="2"/> in <PII type="LOCATION" id="3"/>!"
+
+// Clean up when done
+await anonymizer.dispose();
+```
+
+## Complete Translation Workflow
+
+Here's the full workflow for privacy-preserving translation:
+
+```typescript
+import { 
+  createAnonymizer, 
+  decryptPIIMap, 
+  rehydrate,
+  InMemoryKeyProvider 
+} from 'rehydra';
+
+// 1. Create a key provider (required to decrypt later)
+const keyProvider = new InMemoryKeyProvider();
+
+// 2. Create anonymizer with key provider
+const anonymizer = createAnonymizer({
+  ner: { mode: 'quantized' },
+  keyProvider
+});
+
+await anonymizer.initialize();
+
+// 3. Anonymize before translation
+const original = 'Hello John Smith from Acme Corp in Berlin!';
+const result = await anonymizer.anonymize(original);
+
+console.log(result.anonymizedText);
+// "Hello <PII type="PERSON" id="1"/> from <PII type="ORG" id="2"/> in <PII type="LOCATION" id="3"/>!"
+
+// 4. Translate (placeholders are preserved by most translation APIs)
+const translated = await yourTranslateAPI(result.anonymizedText);
+// "Hallo <PII type="PERSON" id="1"/> von <PII type="ORG" id="2"/> in <PII type="LOCATION" id="3"/>!"
+
+// 5. Decrypt the PII map using the same key
+const encryptionKey = await keyProvider.getKey();
+const piiMap = await decryptPIIMap(result.piiMap, encryptionKey);
+
+// 6. Rehydrate - replace placeholders with original values
+const rehydrated = rehydrate(translated, piiMap);
+
+console.log(rehydrated);
+// "Hallo John Smith von Acme Corp in Berlin!"
+
+// 7. Clean up
+await anonymizer.dispose();
+```
+
+<Tip>
+**Key Points:**
+- **Save the encryption key** — You need the same key to decrypt the PII map
+- **Placeholders are XML-like** — Most translation services preserve them automatically
+- **PII stays local** — Original values never leave your system during translation
+</Tip>
+
+## Semantic Enrichment
+
+Add gender and location attributes for better machine translation:
+
+```typescript
+const anonymizer = createAnonymizer({
+  ner: { mode: 'quantized' },
+  semantic: { 
+    enabled: true,  // Downloads ~12 MB of semantic data on first use
+  }
+});
+
+await anonymizer.initialize();
+
+const result = await anonymizer.anonymize('Hello Maria Schmidt from Berlin!');
+
+console.log(result.anonymizedText);
+// "Hello <PII type="PERSON" gender="female" id="1"/> from <PII type="LOCATION" scope="city" id="2"/>!"
+```
+
+## Understanding the Result
+
+Every anonymization returns a structured result:
+
+```typescript
+const result = await anonymizer.anonymize('Contact john@example.com');
+
+// The anonymized text with placeholder tags
+result.anonymizedText;  // "Contact <PII type="EMAIL" id="1"/>"
+
+// Detected entities (without original values for safety)
+result.entities;        // [{ type: 'EMAIL', id: 1, start: 8, end: 24, ... }]
+
+// Encrypted PII map (for later rehydration)
+result.piiMap;          // { ciphertext: '...', iv: '...', authTag: '...' }
+
+// Processing statistics
+result.stats;           // { totalEntities: 1, processingTimeMs: 5, ... }
+```
+
+## Next Steps
 
 <CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
+  <Card title="Installation Guide" icon="download" href="/installation">
+    Detailed setup for Node.js, browsers, and bundlers
+  </Card>
+  <Card title="PII Types" icon="shield" href="/concepts/pii-types">
+    See all supported PII types
+  </Card>
+  <Card title="NER Detection" icon="brain" href="/guides/ner-detection">
+    Configure the NER model for soft PII
+  </Card>
+  <Card title="Sessions & Storage" icon="database" href="/guides/sessions-storage">
+    Persist PII maps for multi-turn conversations
+  </Card>
 </CardGroup>
-
-<Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
-</Note>

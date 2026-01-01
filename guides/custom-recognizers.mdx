@@ -1,0 +1,280 @@
+---
+title: "Custom Recognizers"
+description: "Add domain-specific PII detection patterns"
+---
+
+Extend Rehydra with custom recognizers for domain-specific identifiers like order numbers, employee IDs, or proprietary formats.
+
+## Quick Start
+
+```typescript
+import { createAnonymizer, createCustomIdRecognizer, PIIType } from 'rehydra';
+
+// Create a custom recognizer
+const orderRecognizer = createCustomIdRecognizer([
+  {
+    name: 'Order Number',
+    pattern: /\bORD-[A-Z0-9]{8}\b/g,
+    type: PIIType.CASE_ID,
+  },
+]);
+
+// Register it
+const anonymizer = createAnonymizer();
+anonymizer.getRegistry().register(orderRecognizer);
+await anonymizer.initialize();
+
+// Use it
+const result = await anonymizer.anonymize('Your order ORD-ABC12345 is shipped');
+// "Your order <PII type="CASE_ID" id="1"/> is shipped"
+```
+
+## Custom ID Recognizer
+
+For simple pattern-based detection, use `createCustomIdRecognizer`:
+
+```typescript
+import { createCustomIdRecognizer, PIIType } from 'rehydra';
+
+const recognizer = createCustomIdRecognizer([
+  {
+    name: 'Order Number',           // Descriptive name
+    pattern: /\bORD-[A-Z0-9]{8}\b/g,  // Regex pattern (must have 'g' flag)
+    type: PIIType.CASE_ID,          // PII type to assign
+  },
+  {
+    name: 'Employee ID',
+    pattern: /\bEMP-[0-9]{6}\b/g,
+    type: PIIType.CUSTOMER_ID,
+  },
+  {
+    name: 'Support Ticket',
+    pattern: /\bTICKET-[0-9]+\b/gi,   // Case-insensitive
+    type: PIIType.CASE_ID,
+  },
+]);
+```
+
+<Warning>
+Always include the `g` (global) flag in your regex patterns. Without it, only the first match will be found.
+</Warning>
+
+## Available PII Types for Custom Patterns
+
+| Type | Use Case |
+|------|----------|
+| `PIIType.CASE_ID` | Order numbers, ticket IDs, reference numbers |
+| `PIIType.CUSTOMER_ID` | Customer IDs, employee IDs, account numbers |
+| `PIIType.ACCOUNT_NUMBER` | Financial account numbers |
+| `PIIType.TAX_ID` | Tax identification numbers |
+| `PIIType.NATIONAL_ID` | National ID numbers, SSN, etc. |
+
+## Extending RegexRecognizer
+
+For more control, extend the `RegexRecognizer` class:
+
+```typescript
+import { RegexRecognizer, PIIType, SpanMatch } from 'rehydra';
+
+class MyCustomRecognizer extends RegexRecognizer {
+  constructor() {
+    super(
+      'MyCustomRecognizer',     // Name
+      PIIType.CASE_ID,          // PII type
+      /\bMY-[A-Z0-9]+\b/g,      // Pattern
+      1.0                       // Confidence (0.0-1.0)
+    );
+  }
+
+  // Override to add validation
+  protected validate(match: string): boolean {
+    // Add custom validation logic
+    return match.length >= 6 && match.length <= 20;
+  }
+
+  // Override to modify confidence based on context
+  protected getConfidence(match: string): number {
+    // Higher confidence for longer matches
+    return match.length > 10 ? 1.0 : 0.9;
+  }
+}
+
+const anonymizer = createAnonymizer();
+anonymizer.getRegistry().register(new MyCustomRecognizer());
+```
+
+## Built-in Recognizers
+
+Rehydra includes these recognizers by default:
+
+| Recognizer | PII Type | Pattern Examples |
+|------------|----------|------------------|
+| `emailRecognizer` | EMAIL | user@example.com |
+| `phoneRecognizer` | PHONE | +49 30 123456 |
+| `ibanRecognizer` | IBAN | DE89370400440532013000 |
+| `bicSwiftRecognizer` | BIC_SWIFT | COBADEFFXXX |
+| `creditCardRecognizer` | CREDIT_CARD | 4111111111111111 |
+| `ipAddressRecognizer` | IP_ADDRESS | 192.168.1.1, ::1 |
+| `urlRecognizer` | URL | https://example.com |
+
+## Recognizer Registry
+
+Manage recognizers through the registry:
+
+```typescript
+const registry = anonymizer.getRegistry();
+
+// Register a recognizer
+registry.register(myRecognizer);
+
+// List all recognizers
+const recognizers = registry.getAll();
+
+// Get specific recognizer by name
+const email = registry.get('EmailRecognizer');
+
+// Remove a recognizer
+registry.unregister('MyCustomRecognizer');
+```
+
+## Create a New Registry
+
+For complete control, create a custom registry:
+
+```typescript
+import { createRegistry, emailRecognizer, phoneRecognizer } from 'rehydra';
+
+// Start with empty registry
+const registry = createRegistry();
+
+// Add only the recognizers you need
+registry.register(emailRecognizer);
+registry.register(phoneRecognizer);
+registry.register(myCustomRecognizer);
+
+// Use custom registry
+const anonymizer = createAnonymizer({ registry });
+```
+
+## Disabling Built-in Recognizers
+
+To disable specific built-in recognizers:
+
+```typescript
+import { createAnonymizer, PIIType } from 'rehydra';
+
+const anonymizer = createAnonymizer({
+  defaultPolicy: {
+    // Only enable specific regex types
+    regexEnabledTypes: new Set([
+      PIIType.EMAIL,
+      PIIType.PHONE,
+      // Exclude IBAN, CREDIT_CARD, etc.
+    ]),
+  }
+});
+```
+
+## Pattern Best Practices
+
+<AccordionGroup>
+  <Accordion title="Use word boundaries">
+    Prevent matching substrings:
+    
+    ```typescript
+    // ❌ Bad: matches "ABCORD-12345XYZ"
+    pattern: /ORD-[0-9]+/g
+    
+    // ✅ Good: only matches complete pattern
+    pattern: /\bORD-[0-9]+\b/g
+    ```
+  </Accordion>
+  
+  <Accordion title="Be specific">
+    Avoid overly broad patterns:
+    
+    ```typescript
+    // ❌ Too broad: matches any numbers
+    pattern: /[0-9]+/g
+    
+    // ✅ Specific: matches expected format
+    pattern: /\bORD-[0-9]{6,10}\b/g
+    ```
+  </Accordion>
+  
+  <Accordion title="Add validation">
+    Validate matches for accuracy:
+    
+    ```typescript
+    class ValidatedRecognizer extends RegexRecognizer {
+      protected validate(match: string): boolean {
+        // Check format
+        if (!match.startsWith('ORD-')) return false;
+        
+        // Check length
+        if (match.length < 10) return false;
+        
+        // Check checksum if applicable
+        return this.validateChecksum(match);
+      }
+    }
+    ```
+  </Accordion>
+  
+  <Accordion title="Consider performance">
+    Complex patterns can slow detection:
+    
+    ```typescript
+    // ❌ Slow: complex lookahead/lookbehind
+    pattern: /(?<=ID:)\s*[A-Z]+(?=\s)/g
+    
+    // ✅ Fast: simple pattern + post-processing
+    pattern: /ID:\s*[A-Z]+/g
+    // Then strip "ID:" in validate()
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Testing Recognizers
+
+```typescript
+import { describe, it, expect } from 'vitest';
+import { createCustomIdRecognizer, PIIType, createAnonymizer } from 'rehydra';
+
+describe('Order Recognizer', () => {
+  const recognizer = createCustomIdRecognizer([
+    { name: 'Order', pattern: /\bORD-[A-Z0-9]{8}\b/g, type: PIIType.CASE_ID },
+  ]);
+
+  it('detects valid order numbers', async () => {
+    const anonymizer = createAnonymizer();
+    anonymizer.getRegistry().register(recognizer);
+    await anonymizer.initialize();
+
+    const result = await anonymizer.anonymize('Order: ORD-ABC12345');
+    expect(result.entities).toHaveLength(1);
+    expect(result.entities[0].type).toBe('CASE_ID');
+  });
+
+  it('ignores invalid patterns', async () => {
+    const anonymizer = createAnonymizer();
+    anonymizer.getRegistry().register(recognizer);
+    await anonymizer.initialize();
+
+    const result = await anonymizer.anonymize('Order: ORD-123');  // Too short
+    expect(result.entities).toHaveLength(0);
+  });
+});
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="PII Types" icon="shield" href="/concepts/pii-types">
+    All supported PII types
+  </Card>
+  <Card title="API Reference" icon="book" href="/api-reference/introduction">
+    Complete API documentation
+  </Card>
+</CardGroup>
+

@@ -1,0 +1,271 @@
+---
+title: "Sessions"
+description: "Session-based API for multi-turn conversations"
+---
+
+Sessions provide a simplified API for anonymizing and rehydrating text across multiple turns, with automatic PII map persistence.
+
+## Creating a Session
+
+```typescript
+import { 
+  createAnonymizer,
+  InMemoryKeyProvider,
+  SQLitePIIStorageProvider
+} from 'rehydra';
+
+// Setup storage
+const storage = new SQLitePIIStorageProvider('./pii.db');
+await storage.initialize();
+
+// Create anonymizer with storage
+const anonymizer = createAnonymizer({
+  ner: { mode: 'quantized' },
+  keyProvider: new InMemoryKeyProvider(),
+  piiStorageProvider: storage,
+});
+await anonymizer.initialize();
+
+// Create a session
+const session = anonymizer.session('conversation-123');
+```
+
+<Warning>
+Both `keyProvider` and `piiStorageProvider` are required for sessions. Without them, `session()` will throw an error.
+</Warning>
+
+---
+
+## AnonymizerSession Interface
+
+```typescript
+interface AnonymizerSession {
+  /**
+   * The session ID
+   */
+  readonly sessionId: string;
+  
+  /**
+   * Anonymize text and save PII map to storage
+   */
+  anonymize(
+    text: string,
+    locale?: string,
+    policy?: Partial<AnonymizationPolicy>
+  ): Promise<AnonymizationResult>;
+  
+  /**
+   * Load PII map from storage and restore original values
+   */
+  rehydrate(text: string): Promise<string>;
+  
+  /**
+   * Load the stored PII map
+   */
+  load(): Promise<StoredPIIMap | null>;
+  
+  /**
+   * Delete this session from storage
+   */
+  delete(): Promise<boolean>;
+  
+  /**
+   * Check if this session exists in storage
+   */
+  exists(): Promise<boolean>;
+}
+```
+
+---
+
+## session.anonymize()
+
+Anonymizes text and automatically saves the PII map.
+
+```typescript
+const session = anonymizer.session('chat-123');
+
+const result = await session.anonymize('Hello John Smith!');
+console.log(result.anonymizedText);
+// "Hello <PII type="PERSON" id="1"/>!"
+
+// PII map is automatically saved to storage
+```
+
+### Multi-Message Consistency
+
+Entity IDs are consistent across multiple calls:
+
+```typescript
+// Message 1
+const msg1 = await session.anonymize('Email me at john@example.com');
+// "Email me at <PII type="EMAIL" id="1"/>"
+
+// Message 2 - same email gets same ID
+const msg2 = await session.anonymize('Or use john@example.com directly');
+// "Or use <PII type="EMAIL" id="1"/> directly"
+//                              ↑ Same ID
+```
+
+---
+
+## session.rehydrate()
+
+Loads the PII map from storage and restores original values.
+
+```typescript
+const session = anonymizer.session('chat-123');
+
+// After anonymization and processing
+const translated = 'Hallo <PII type="PERSON" id="1"/>!';
+
+const original = await session.rehydrate(translated);
+console.log(original);
+// "Hallo John Smith!"
+```
+
+### Cross-Request Rehydration
+
+```typescript
+// Request 1: Anonymize
+const session1 = anonymizer.session('chat-123');
+await session1.anonymize('Hello John Smith!');
+
+// Request 2 (later, even after server restart): Rehydrate
+const session2 = anonymizer.session('chat-123');  // Same ID
+const original = await session2.rehydrate(translatedText);
+```
+
+---
+
+## session.load()
+
+Manually load the stored PII map.
+
+```typescript
+const session = anonymizer.session('chat-123');
+
+const storedMap = await session.load();
+if (storedMap) {
+  console.log('Entity count:', storedMap.metadata.entityCount);
+  console.log('Types:', storedMap.metadata.types);
+  console.log('Created:', storedMap.metadata.createdAt);
+}
+```
+
+---
+
+## session.exists()
+
+Check if a session has stored data.
+
+```typescript
+const session = anonymizer.session('chat-123');
+
+if (await session.exists()) {
+  console.log('Session has stored data');
+} else {
+  console.log('New session');
+}
+```
+
+---
+
+## session.delete()
+
+Remove a session from storage.
+
+```typescript
+const session = anonymizer.session('chat-123');
+
+const wasDeleted = await session.delete();
+console.log(wasDeleted ? 'Deleted' : 'Not found');
+```
+
+---
+
+## Complete Example
+
+```typescript
+import { 
+  createAnonymizer,
+  InMemoryKeyProvider,
+  SQLitePIIStorageProvider
+} from 'rehydra';
+
+async function main() {
+  // Setup
+  const storage = new SQLitePIIStorageProvider('./pii.db');
+  await storage.initialize();
+  
+  const anonymizer = createAnonymizer({
+    ner: { mode: 'quantized' },
+    keyProvider: new InMemoryKeyProvider(),
+    piiStorageProvider: storage,
+  });
+  await anonymizer.initialize();
+  
+  // Conversation session
+  const session = anonymizer.session('user-alice-conversation');
+  
+  // Turn 1
+  const turn1 = await session.anonymize('I am Alice from Berlin');
+  console.log(turn1.anonymizedText);
+  // "I am <PII type="PERSON" id="1"/> from <PII type="LOCATION" id="1"/>"
+  
+  // Simulate translation
+  const translated1 = await translate(turn1.anonymizedText);
+  
+  // Turn 2
+  const turn2 = await session.anonymize('Alice works at Acme Corp');
+  console.log(turn2.anonymizedText);
+  // "I am <PII type="PERSON" id="1"/> works at <PII type="ORG" id="1"/>"
+  //                            ↑ Same ID (Alice)
+  
+  // Rehydrate both turns
+  const original1 = await session.rehydrate(translated1);
+  const original2 = await session.rehydrate(translated2);
+  
+  // Cleanup old sessions
+  const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+  await storage.cleanup(weekAgo);
+  
+  // Shutdown
+  await anonymizer.dispose();
+  await storage.close();
+}
+```
+
+---
+
+## Multiple Conversations
+
+```typescript
+// Each user gets their own session
+function handleUserMessage(userId: string, message: string) {
+  const session = anonymizer.session(`user-${userId}`);
+  return session.anonymize(message);
+}
+
+// Sessions are independent
+await handleUserMessage('alice', 'I am Alice');  // Session: user-alice
+await handleUserMessage('bob', 'I am Bob');      // Session: user-bob
+```
+
+---
+
+## Session vs Direct Anonymize
+
+| Feature | `anonymizer.anonymize()` | `session.anonymize()` |
+|---------|--------------------------|----------------------|
+| Auto-save PII map | ❌ | ✅ |
+| Cross-request rehydration | ❌ (manual) | ✅ |
+| ID consistency across calls | ❌ | ✅ |
+| Requires storage provider | ❌ | ✅ |
+
+## Related
+
+- [Storage Providers](/api-reference/storage-providers) - Available storage options
+- [Sessions & Storage Guide](/guides/sessions-storage) - Detailed usage guide
+- [createAnonymizer](/api-reference/create-anonymizer) - Configuration options
+

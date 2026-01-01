@@ -1,0 +1,224 @@
+---
+title: "Rehydrate Functions"
+description: "Restore original PII values from anonymized text"
+---
+
+Rehydration is the process of replacing placeholder tags with original values.
+
+## rehydrate()
+
+Replaces PII placeholders with original values.
+
+### Signature
+
+```typescript
+function rehydrate(
+  text: string,
+  piiMap: Map<string, string>
+): string
+```
+
+### Parameters
+
+<ParamField path="text" type="string" required>
+  Text containing PII placeholder tags
+</ParamField>
+
+<ParamField path="piiMap" type="Map<string, string>" required>
+  Decrypted PII map from `decryptPIIMap()`
+</ParamField>
+
+### Returns
+
+Text with placeholders replaced by original values.
+
+### Example
+
+```typescript
+import { rehydrate, decryptPIIMap } from 'rehydra';
+
+// After anonymization and translation
+const translated = 'Hallo <PII type="PERSON" id="1"/> von <PII type="ORG" id="1"/>!';
+
+// Decrypt the PII map
+const key = await keyProvider.getKey();
+const piiMap = await decryptPIIMap(result.piiMap, key);
+// Map { 'PERSON:1' => 'John Smith', 'ORG:1' => 'Acme Corp' }
+
+// Rehydrate
+const original = rehydrate(translated, piiMap);
+// "Hallo John Smith von Acme Corp!"
+```
+
+---
+
+## decryptPIIMap()
+
+Decrypts the encrypted PII map from an anonymization result.
+
+### Signature
+
+```typescript
+function decryptPIIMap(
+  encryptedMap: EncryptedPIIMap,
+  key: Uint8Array
+): Promise<Map<string, string>>
+```
+
+### Parameters
+
+<ParamField path="encryptedMap" type="EncryptedPIIMap" required>
+  The encrypted PII map from `result.piiMap`
+  
+  ```typescript
+  interface EncryptedPIIMap {
+    ciphertext: string;  // Base64
+    iv: string;          // Base64
+    authTag: string;     // Base64
+  }
+  ```
+</ParamField>
+
+<ParamField path="key" type="Uint8Array" required>
+  The encryption key (same key used during anonymization)
+</ParamField>
+
+### Returns
+
+A `Map<string, string>` where:
+- Key: `"TYPE:id"` (e.g., `"EMAIL:1"`, `"PERSON:2"`)
+- Value: Original PII value
+
+### Example
+
+```typescript
+import { decryptPIIMap, InMemoryKeyProvider } from 'rehydra';
+
+const keyProvider = new InMemoryKeyProvider();
+
+// During anonymization
+const anonymizer = createAnonymizer({ keyProvider });
+const result = await anonymizer.anonymize('Email: john@example.com');
+
+// Later, to rehydrate
+const key = await keyProvider.getKey();
+const piiMap = await decryptPIIMap(result.piiMap, key);
+
+console.log(piiMap.get('EMAIL:1'));  // "john@example.com"
+```
+
+---
+
+## Complete Workflow
+
+```typescript
+import { 
+  createAnonymizer,
+  decryptPIIMap,
+  rehydrate,
+  InMemoryKeyProvider
+} from 'rehydra';
+
+// 1. Setup
+const keyProvider = new InMemoryKeyProvider();
+const anonymizer = createAnonymizer({
+  ner: { mode: 'quantized' },
+  keyProvider
+});
+await anonymizer.initialize();
+
+// 2. Anonymize
+const result = await anonymizer.anonymize(
+  'Contact John Smith at john@acme.com'
+);
+console.log(result.anonymizedText);
+// "Contact <PII type="PERSON" id="1"/> at <PII type="EMAIL" id="1"/>"
+
+// 3. Process (e.g., translate)
+const translated = await translate(result.anonymizedText);
+// "Kontaktieren Sie <PII type="PERSON" id="1"/> unter <PII type="EMAIL" id="1"/>"
+
+// 4. Decrypt PII map
+const key = await keyProvider.getKey();
+const piiMap = await decryptPIIMap(result.piiMap, key);
+
+// 5. Rehydrate
+const final = rehydrate(translated, piiMap);
+console.log(final);
+// "Kontaktieren Sie John Smith unter john@acme.com"
+
+// 6. Cleanup
+await anonymizer.dispose();
+```
+
+---
+
+## Session-Based Rehydration
+
+When using sessions, rehydration is simplified:
+
+```typescript
+const session = anonymizer.session('chat-123');
+
+// Anonymize (auto-saves PII map)
+const result = await session.anonymize('Hello John Smith!');
+
+// Rehydrate (auto-loads and decrypts)
+const original = await session.rehydrate(result.anonymizedText);
+```
+
+See [Sessions](/api-reference/sessions) for details.
+
+---
+
+## Placeholder Format
+
+Rehydrate expects placeholders in this format:
+
+```xml
+<PII type="TYPE" id="N"/>
+<PII type="TYPE" id="N" gender="..."/>
+<PII type="TYPE" id="N" scope="..."/>
+```
+
+The function matches based on `type` and `id` attributes.
+
+### Handling Malformed Placeholders
+
+```typescript
+const text = 'Hello <PII type="PERSON" id="1"/> and <BROKEN/>';
+const result = rehydrate(text, piiMap);
+// "Hello John Smith and <BROKEN/>"
+// Unmatched tags are preserved
+```
+
+---
+
+## Error Handling
+
+### Missing Key
+
+```typescript
+try {
+  const piiMap = await decryptPIIMap(result.piiMap, wrongKey);
+} catch (error) {
+  // "Decryption failed: invalid key or corrupted data"
+}
+```
+
+### Missing PII Entry
+
+```typescript
+const piiMap = new Map([['EMAIL:1', 'test@example.com']]);
+const text = '<PII type="PERSON" id="1"/>';  // Not in map
+
+const result = rehydrate(text, piiMap);
+// "<PII type="PERSON" id="1"/>"  // Unchanged (no match)
+```
+
+## Related
+
+- [Encryption](/concepts/encryption) - How PII maps are encrypted
+- [Sessions](/api-reference/sessions) - Simplified rehydration with sessions
+- [Crypto](/api-reference/crypto) - Key management utilities
+

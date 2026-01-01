@@ -1,0 +1,143 @@
+---
+title: "PII Types"
+description: "Understand the types of personally identifiable information Rehydra can detect"
+---
+
+Rehydra detects two categories of PII: **structured PII** (detected via regex) and **soft PII** (detected via NER model).
+
+## Structured PII (Regex Detection)
+
+These types have well-defined patterns and are detected using optimized regular expressions with validation.
+
+| Type | Description | Example | Validation |
+|------|-------------|---------|------------|
+| `EMAIL` | Email addresses | `john@example.com` | RFC 5322 format |
+| `PHONE` | Phone numbers (international) | `+49 30 123456` | E.164 patterns |
+| `IBAN` | International Bank Account Numbers | `DE89370400440532013000` | Checksum validation |
+| `BIC_SWIFT` | Bank Identifier Codes | `COBADEFFXXX` | Format validation |
+| `CREDIT_CARD` | Credit card numbers | `4111111111111111` | Luhn algorithm |
+| `IP_ADDRESS` | IPv4 and IPv6 addresses | `192.168.1.1` | Format validation |
+| `URL` | Web URLs | `https://example.com` | URI format |
+| `CASE_ID` | Case/ticket numbers | `CASE-12345` | Configurable pattern |
+| `CUSTOMER_ID` | Customer identifiers | `CUST-ABC123` | Configurable pattern |
+
+## Soft PII (NER Detection)
+
+These types require contextual understanding and are detected using a trained NER (Named Entity Recognition) model.
+
+| Type | Description | Example | Semantic Attributes |
+|------|-------------|---------|---------------------|
+| `PERSON` | Person names | `John Smith`, `Maria` | `gender` (male/female/neutral) |
+| `ORG` | Organization names | `Acme Corp`, `Google` | — |
+| `LOCATION` | Places and locations | `Berlin`, `Germany` | `scope` (city/country/region) |
+| `ADDRESS` | Physical addresses | `123 Main St` | — |
+| `DATE_OF_BIRTH` | Dates of birth | `born on March 15, 1990` | — |
+
+<Note>
+NER detection requires initializing with a model mode other than `'disabled'`. See the [NER Detection Guide](/guides/ner-detection) for setup.
+</Note>
+
+## Priority Resolution
+
+When multiple detections overlap (e.g., an email that's also a URL), Rehydra uses priority ordering:
+
+```
+Lower Priority                              Higher Priority
+──────────────────────────────────────────────────────────→
+URL → IP → LOCATION → ORG → PERSON → PHONE → EMAIL → IBAN → CREDIT_CARD
+```
+
+Higher priority types take precedence when spans overlap.
+
+## Confidence Thresholds
+
+NER-detected entities have confidence scores. You can configure minimum thresholds:
+
+```typescript
+const anonymizer = createAnonymizer({
+  ner: { 
+    mode: 'quantized',
+    thresholds: {
+      PERSON: 0.8,    // Require 80% confidence for names
+      ORG: 0.7,       // 70% for organizations
+      LOCATION: 0.6,  // 60% for locations
+    }
+  }
+});
+```
+
+## Type-Specific Detection Control
+
+Enable or disable specific PII types:
+
+```typescript
+import { createAnonymizer, PIIType } from 'rehydra';
+
+const anonymizer = createAnonymizer({
+  defaultPolicy: {
+    // Only detect these regex types
+    regexEnabledTypes: new Set([
+      PIIType.EMAIL, 
+      PIIType.PHONE,
+    ]),
+    // Only detect these NER types
+    nerEnabledTypes: new Set([
+      PIIType.PERSON,
+    ]),
+  }
+});
+```
+
+## Custom ID Patterns
+
+Add domain-specific patterns for case IDs and customer IDs:
+
+```typescript
+import { createCustomIdRecognizer, PIIType } from 'rehydra';
+
+const customRecognizer = createCustomIdRecognizer([
+  {
+    name: 'Order Number',
+    pattern: /\bORD-[A-Z0-9]{8}\b/g,
+    type: PIIType.CASE_ID,
+  },
+  {
+    name: 'Customer ID',
+    pattern: /\bCUST-[0-9]{6}\b/g,
+    type: PIIType.CUSTOMER_ID,
+  },
+]);
+
+const anonymizer = createAnonymizer();
+anonymizer.getRegistry().register(customRecognizer);
+```
+
+## Placeholder Format
+
+Detected PII is replaced with XML-like placeholder tags:
+
+```xml
+<!-- Basic format -->
+<PII type="EMAIL" id="1"/>
+
+<!-- With semantic attributes -->
+<PII type="PERSON" gender="female" id="1"/>
+<PII type="LOCATION" scope="city" id="2"/>
+```
+
+The placeholder format is designed to be:
+- **Preserved by translation APIs** — Most services treat XML-like tags as non-translatable
+- **Parseable** — Easy to extract for rehydration
+- **Informative** — Type and attributes help with contextual translation
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="NER Detection" icon="brain" href="/guides/ner-detection">
+    Configure the NER model for soft PII detection
+  </Card>
+  <Card title="Custom Recognizers" icon="code" href="/guides/custom-recognizers">
+    Add your own detection patterns
+  </Card>
+</CardGroup>
+

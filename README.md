@@ -1,43 +1,59 @@
-# Mintlify Starter Kit
+# Rehydra Documentation
 
-Use the starter kit to get your docs deployed and ready to customize.
+This is the documentation site for [Rehydra](https://github.com/rehydra-ai/rehydra-sdk), an on-device PII anonymization module for high-privacy AI workflows.
 
-Click the green **Use this template** button at the top of this repo to copy the Mintlify starter kit. The starter kit contains examples with
+## Documentation Structure
 
-- Guide pages
-- Navigation
-- Customizations
-- API reference pages
-- Use of popular components
-
-**[Follow the full quickstart guide](https://starter.mintlify.com/quickstart)**
+```
+docs/
+├── index.mdx                    # Introduction
+├── quickstart.mdx               # Quick start guide
+├── installation.mdx             # Installation for all platforms
+├── concepts/
+│   ├── pii-types.mdx            # PII types reference
+│   ├── anonymization-pipeline.mdx  # How the pipeline works
+│   └── encryption.mdx           # Security & encryption
+├── guides/
+│   ├── ner-detection.mdx        # NER model configuration
+│   ├── semantic-enrichment.mdx  # Gender/scope attributes
+│   ├── sessions-storage.mdx     # Persistent storage
+│   ├── browser-usage.mdx        # Browser-specific guide
+│   └── custom-recognizers.mdx   # Custom patterns
+└── api-reference/
+    ├── introduction.mdx         # API overview
+    ├── create-anonymizer.mdx    # createAnonymizer()
+    ├── anonymize.mdx            # Anonymize functions
+    ├── rehydrate.mdx            # Rehydration functions
+    ├── storage-providers.mdx    # Storage providers
+    ├── sessions.mdx             # Session API
+    ├── crypto.mdx               # Encryption utilities
+    └── model-management.mdx     # Model download/cache
+```
 
 ## Development
 
-Install the [Mintlify CLI](https://www.npmjs.com/package/mint) to preview your documentation changes locally. To install, use the following command:
+### Prerequisites
 
+- Node.js 19+
+- [Mintlify CLI](https://www.npmjs.com/package/mintlify)
+
+### Local Preview
+
+```bash
+# Install Mintlify CLI
+npm i -g mintlify
+
+# Start dev server
+cd docs
+mintlify dev
 ```
-npm i -g mint
-```
 
-Run the following command at the root of your documentation, where your `docs.json` is located:
+Visit `http://localhost:3000` to see the docs.
 
-```
-mint dev
-```
+### Deployment
 
-View your local preview at `http://localhost:3000`.
+The docs are automatically deployed via the Mintlify GitHub app when changes are pushed to the main branch.
 
-## Publishing changes
+## License
 
-Install our GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app) to propagate changes from your repo to your deployment. Changes are deployed to production automatically after pushing to the default branch.
-
-## Need help?
-
-### Troubleshooting
-
-- If your dev environment isn't running: Run `mint update` to ensure you have the most recent version of the CLI.
-- If a page loads as a 404: Make sure you are running in a folder with a valid `docs.json`.
-
-### Resources
-- [Mintlify documentation](https://mintlify.com/docs)
+MIT

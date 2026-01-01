@@ -1,0 +1,275 @@
+---
+title: "Browser Usage"
+description: "Using Rehydra in web browsers"
+---
+
+Rehydra works seamlessly in browsers without special configuration. This guide covers browser-specific considerations.
+
+## Basic Example
+
+```html
+<!DOCTYPE html>
+<html>
+<head>
+  <title>PII Anonymization</title>
+</head>
+<body>
+  <script type="module">
+    import { 
+      createAnonymizer, 
+      InMemoryKeyProvider,
+      decryptPIIMap,
+      rehydrate
+    } from './node_modules/rehydra/dist/browser.js';
+    
+    async function demo() {
+      const keyProvider = new InMemoryKeyProvider();
+      const anonymizer = createAnonymizer({
+        ner: { 
+          mode: 'quantized',
+          onStatus: (s) => console.log('NER:', s),
+          onDownloadProgress: (p) => console.log(`Download: ${p.percent}%`)
+        },
+        semantic: { enabled: true },
+        keyProvider
+      });
+      
+      await anonymizer.initialize();
+      
+      const result = await anonymizer.anonymize(
+        'Contact Maria Schmidt at maria@example.com in Berlin.'
+      );
+      
+      console.log('Anonymized:', result.anonymizedText);
+      
+      // Rehydrate
+      const key = await keyProvider.getKey();
+      const piiMap = await decryptPIIMap(result.piiMap, key);
+      const original = rehydrate(result.anonymizedText, piiMap);
+      
+      console.log('Rehydrated:', original);
+      
+      await anonymizer.dispose();
+    }
+    
+    demo().catch(console.error);
+  </script>
+</body>
+</html>
+```
+
+## Bundler Setup
+
+### Vite
+
+No special configuration needed:
+
+```typescript
+// vite.config.ts
+import { defineConfig } from 'vite';
+
+export default defineConfig({
+  // Standard config - Rehydra works out of the box
+});
+```
+
+```typescript
+// Your app code
+import { createAnonymizer } from 'rehydra';
+// Automatically uses browser-safe build
+```
+
+### Webpack
+
+Webpack 5+ handles conditional exports automatically:
+
+```javascript
+// webpack.config.js
+module.exports = {
+  // Standard config - Rehydra works out of the box
+};
+```
+
+### esbuild
+
+```bash
+esbuild src/index.ts --bundle --outdir=dist --format=esm
+# Browser build is automatically selected
+```
+
+## First-Use Downloads
+
+On first initialization, Rehydra downloads:
+
+| Data | Size | Storage |
+|------|------|---------|
+| NER Model (quantized) | ~280 MB | OPFS |
+| Semantic Data | ~12 MB | IndexedDB |
+
+Show download progress to users:
+
+```typescript
+const anonymizer = createAnonymizer({
+  ner: {
+    mode: 'quantized',
+    onStatus: (status) => {
+      document.getElementById('status').textContent = status;
+    },
+    onDownloadProgress: (progress) => {
+      const percent = Math.round(progress.percent);
+      document.getElementById('progress').style.width = `${percent}%`;
+    }
+  }
+});
+```
+
+## Storage in Browsers
+
+### Model Storage (OPFS)
+
+Large model files use the [Origin Private File System](https://developer.mozilla.org/en-US/docs/Web/API/File_System_API/Origin_private_file_system):
+
+- Persistent across sessions
+- Not visible in DevTools
+- Quota managed by browser
+- Cleared with "Clear site data"
+
+### PII Map Storage (IndexedDB)
+
+For session-based storage:
+
+```typescript
+import { 
+  createAnonymizer,
+  IndexedDBPIIStorageProvider,
+  InMemoryKeyProvider,
+} from 'rehydra';
+
+const storage = new IndexedDBPIIStorageProvider('my-app-pii');
+
+const anonymizer = createAnonymizer({
+  ner: { mode: 'quantized' },
+  keyProvider: new InMemoryKeyProvider(),
+  piiStorageProvider: storage,
+});
+```
+
+## ONNX Runtime
+
+The NER model requires `onnxruntime-web`. It's loaded automatically:
+
+```typescript
+// Automatic: CDN fallback if not bundled
+const anonymizer = createAnonymizer({
+  ner: { mode: 'quantized' }
+});
+```
+
+For explicit bundling:
+
+```bash
+npm install onnxruntime-web
+```
+
+```typescript
+// Will use bundled version
+import 'onnxruntime-web';
+import { createAnonymizer } from 'rehydra';
+```
+
+## Browser Compatibility
+
+| Browser | Minimum Version | Notes |
+|---------|-----------------|-------|
+| Chrome | 86+ | Full support |
+| Edge | 86+ | Full support |
+| Firefox | 89+ | Full support |
+| Safari | 15.4+ | Full support |
+
+Required APIs:
+- [Web Crypto API](https://developer.mozilla.org/en-US/docs/Web/API/Web_Crypto_API)
+- [IndexedDB](https://developer.mozilla.org/en-US/docs/Web/API/IndexedDB_API)
+- [OPFS](https://developer.mozilla.org/en-US/docs/Web/API/File_System_API/Origin_private_file_system)
+- [WebAssembly](https://developer.mozilla.org/en-US/docs/WebAssembly)
+
+## Offline Support
+
+After initial download, everything works offline:
+
+```typescript
+// First visit: downloads ~290 MB
+await anonymizer.initialize();
+
+// Subsequent visits: instant (data cached)
+await anonymizer.initialize();  // ~100ms
+```
+
+## Memory Considerations
+
+The NER model uses ~200-300 MB RAM when loaded. For memory-constrained environments:
+
+```typescript
+// Dispose when not needed
+await anonymizer.dispose();
+
+// Or use regex-only mode
+import { anonymizeRegexOnly } from 'rehydra';
+const result = await anonymizeRegexOnly(text);  // ~5 MB RAM
+```
+
+## Web Workers
+
+For non-blocking UI, run Rehydra in a Web Worker:
+
+```typescript
+// worker.ts
+import { createAnonymizer } from 'rehydra';
+
+let anonymizer;
+
+self.onmessage = async (e) => {
+  if (e.data.type === 'init') {
+    anonymizer = createAnonymizer({ ner: { mode: 'quantized' } });
+    await anonymizer.initialize();
+    self.postMessage({ type: 'ready' });
+  }
+  
+  if (e.data.type === 'anonymize') {
+    const result = await anonymizer.anonymize(e.data.text);
+    self.postMessage({ type: 'result', result });
+  }
+};
+
+// main.ts
+const worker = new Worker('./worker.ts', { type: 'module' });
+worker.postMessage({ type: 'init' });
+```
+
+## CSP Considerations
+
+If using Content Security Policy, ensure these are allowed:
+
+```
+script-src 'wasm-unsafe-eval';  # For ONNX WebAssembly
+connect-src https://huggingface.co;  # For model downloads
+```
+
+## What's NOT Available in Browser
+
+The browser build excludes:
+
+- `SQLitePIIStorageProvider` (use `IndexedDBPIIStorageProvider`)
+- Node.js `fs`, `path`, `os` modules
+- Direct file system access
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Sessions & Storage" icon="database" href="/guides/sessions-storage">
+    IndexedDB storage for browsers
+  </Card>
+  <Card title="Installation" icon="download" href="/installation">
+    Bundler-specific setup
+  </Card>
+</CardGroup>
+

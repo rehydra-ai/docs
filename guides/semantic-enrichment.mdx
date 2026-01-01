@@ -1,0 +1,213 @@
+---
+title: "Semantic Enrichment"
+description: "Add gender and location attributes for better machine translation"
+---
+
+Semantic enrichment adds contextual attributes to PII placeholders, helping translation systems maintain grammatical correctness across languages.
+
+## Why Semantic Attributes?
+
+Many languages have grammatical gender agreement. Without knowing the gender of a person, translation quality suffers:
+
+```
+// Without semantic enrichment
+Input:  "Thank <PII type="PERSON" id="1"/> for the help."
+German: "Danke <PII type="PERSON" id="1"/> für die Hilfe."
+
+// With semantic enrichment
+Input:  "Thank <PII type="PERSON" gender="female" id="1"/> for the help."
+German: "Danke ihr für die Hilfe."  // Correct feminine pronoun
+```
+
+## Enable Semantic Enrichment
+
+```typescript
+import { createAnonymizer } from 'rehydra';
+
+const anonymizer = createAnonymizer({
+  ner: { mode: 'quantized' },
+  semantic: { 
+    enabled: true,
+    onStatus: (status) => console.log(status),
+  }
+});
+
+await anonymizer.initialize();
+
+const result = await anonymizer.anonymize('Hello Maria Schmidt from Berlin!');
+console.log(result.anonymizedText);
+// "Hello <PII type="PERSON" gender="female" id="1"/> from <PII type="LOCATION" scope="city" id="2"/>!"
+```
+
+## Semantic Attributes
+
+### Person Gender
+
+| Attribute Value | Meaning | Example Names |
+|-----------------|---------|---------------|
+| `gender="male"` | Masculine name | John, Michael, Hans |
+| `gender="female"` | Feminine name | Maria, Sarah, Anna |
+| `gender="neutral"` | Ambiguous/unknown | Alex, Jordan, Sam |
+
+### Location Scope
+
+| Attribute Value | Meaning | Examples |
+|-----------------|---------|----------|
+| `scope="city"` | City/town | Berlin, Paris, Tokyo |
+| `scope="country"` | Country | Germany, France, Japan |
+| `scope="region"` | Region/state | Bavaria, California, Hokkaido |
+
+## Semantic Data
+
+Semantic enrichment uses lookup databases (~12 MB total):
+
+- **Name database**: First names with gender associations
+- **Location database**: Cities, countries, regions with classifications
+
+### First-Use Download
+
+```typescript
+const anonymizer = createAnonymizer({
+  semantic: { 
+    enabled: true,
+    autoDownload: true,  // Default: auto-download if not cached
+    onDownloadProgress: (progress) => {
+      console.log(`${progress.file}: ${progress.percent}%`);
+    }
+  }
+});
+```
+
+### Manual Data Management
+
+```typescript
+import { 
+  isSemanticDataDownloaded,
+  downloadSemanticData,
+  clearSemanticDataCache 
+} from 'rehydra';
+
+// Check if data is cached
+const hasData = await isSemanticDataDownloaded();
+
+// Pre-download
+await downloadSemanticData((progress) => {
+  console.log(`${progress.file}: ${progress.percent}%`);
+});
+
+// Clear cache
+await clearSemanticDataCache();
+```
+
+## Title Extraction
+
+When semantic enrichment is enabled, honorific titles are extracted and kept visible:
+
+```typescript
+const result = await anonymizer.anonymize('Contact Dr. Maria Schmidt');
+// "Contact Dr. <PII type="PERSON" gender="female" id="1"/>"
+```
+
+Supported titles:
+- Academic: Dr., Prof., PhD
+- Honorific: Mr., Mrs., Ms., Miss
+- Professional: Rev., Hon.
+- German: Herr, Frau, Dr.
+- French: M., Mme., Mlle.
+- And many more...
+
+<Tip>
+Titles remain visible because they're often important for translation and don't reveal the person's identity on their own.
+</Tip>
+
+## Locale Hints
+
+Improve detection accuracy with locale hints:
+
+```typescript
+const result = await anonymizer.anonymize(
+  'Bonjour Jean-Pierre de Lyon!',
+  'fr-FR'  // French locale
+);
+```
+
+The locale helps with:
+- Name gender inference (culture-specific names)
+- Title recognition (Mr. vs Herr vs M.)
+
+## Configuration Options
+
+```typescript
+const anonymizer = createAnonymizer({
+  semantic: {
+    enabled: true,
+    autoDownload: true,
+    onStatus: (status) => console.log(status),
+    onDownloadProgress: (progress) => {
+      console.log(`${progress.file}: ${progress.percent}%`);
+    }
+  },
+  defaultPolicy: {
+    enableSemanticMasking: true,  // Enable in policy (auto-set when semantic.enabled)
+  }
+});
+```
+
+## Cache Locations
+
+Semantic data is cached locally:
+
+### Node.js
+
+| Platform | Location |
+|----------|----------|
+| macOS | `~/Library/Caches/rehydra/semantic-data/` |
+| Linux | `~/.cache/rehydra/semantic-data/` |
+| Windows | `%LOCALAPPDATA%/rehydra/semantic-data/` |
+
+### Browser
+
+Uses IndexedDB for cross-session persistence.
+
+## Use Cases
+
+<AccordionGroup>
+  <Accordion title="Machine Translation">
+    German, French, Spanish, and many other languages have grammatical gender. Semantic attributes help MT systems:
+    
+    ```
+    EN: "Please contact <PII gender="female"/> for assistance."
+    DE: "Bitte kontaktieren Sie sie für Unterstützung."
+    ```
+  </Accordion>
+  
+  <Accordion title="Location Prepositions">
+    Different location types use different prepositions:
+    
+    ```
+    "I'm in Berlin" (city) → "Ich bin in Berlin"
+    "I'm in Germany" (country) → "Ich bin in Deutschland"
+    ```
+    
+    The `scope` attribute helps translation systems choose correctly.
+  </Accordion>
+  
+  <Accordion title="Contextual Processing">
+    Beyond translation, semantic attributes enable:
+    - Gender-aware text generation
+    - Location-based content filtering
+    - Name normalization
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Browser Usage" icon="browser" href="/guides/browser-usage">
+    Using semantic enrichment in browsers
+  </Card>
+  <Card title="Sessions & Storage" icon="database" href="/guides/sessions-storage">
+    Persist enriched PII maps
+  </Card>
+</CardGroup>
+

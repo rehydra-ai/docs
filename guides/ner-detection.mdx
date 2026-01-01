@@ -1,0 +1,243 @@
+---
+title: "NER Detection"
+description: "Configure the NER model for detecting names, organizations, and locations"
+---
+
+The NER (Named Entity Recognition) model enables detection of soft PII like person names, organizations, and locations that can't be captured by regex patterns.
+
+## Model Modes
+
+| Mode | Description | Size | Use Case |
+|------|-------------|------|----------|
+| `'disabled'` | No NER, regex only | 0 | Fast processing, structured PII only |
+| `'quantized'` | Smaller quantized model | ~280 MB | Recommended for most use cases |
+| `'standard'` | Full-size model | ~1.1 GB | Maximum accuracy |
+| `'custom'` | Your own ONNX model | Varies | Domain-specific models |
+
+## Basic Setup
+
+```typescript
+import { createAnonymizer } from 'rehydra';
+
+const anonymizer = createAnonymizer({
+  ner: { 
+    mode: 'quantized',
+    onStatus: (status) => console.log(status),
+  }
+});
+
+await anonymizer.initialize();  // Downloads model on first use
+
+const result = await anonymizer.anonymize('Hello John Smith from Acme Corp!');
+// "Hello <PII type="PERSON" id="1"/> from <PII type="ORG" id="1"/>!"
+```
+
+## Download Progress
+
+Track model download progress:
+
+```typescript
+const anonymizer = createAnonymizer({
+  ner: {
+    mode: 'quantized',
+    onStatus: (status) => console.log('Status:', status),
+    onDownloadProgress: (progress) => {
+      console.log(`${progress.file}: ${progress.percent}%`);
+    }
+  }
+});
+```
+
+Output during first initialization:
+
+```
+Status: Downloading model files...
+model.onnx: 15%
+model.onnx: 30%
+model.onnx: 100%
+vocab.txt: 100%
+Status: Loading NER model...
+Status: NER model loaded!
+```
+
+## Confidence Thresholds
+
+NER entities have confidence scores (0.0-1.0). Configure minimum thresholds:
+
+```typescript
+const anonymizer = createAnonymizer({
+  ner: { 
+    mode: 'quantized',
+    thresholds: {
+      PERSON: 0.8,     // 80% confidence required
+      ORG: 0.7,        // 70% for organizations
+      LOCATION: 0.6,   // 60% for locations
+    }
+  }
+});
+```
+
+Lower thresholds → more detections (potentially more false positives)
+Higher thresholds → fewer detections (may miss some entities)
+
+## Auto-Download Control
+
+By default, models are downloaded automatically. To disable:
+
+```typescript
+const anonymizer = createAnonymizer({
+  ner: {
+    mode: 'quantized',
+    autoDownload: false,  // Will throw if model not present
+  }
+});
+```
+
+## Manual Model Management
+
+Pre-download models or manage cache:
+
+```typescript
+import { 
+  isModelDownloaded,
+  downloadModel,
+  clearModelCache,
+  listDownloadedModels
+} from 'rehydra';
+
+// Check if model exists
+const hasModel = await isModelDownloaded('quantized');
+
+// Pre-download with progress
+await downloadModel('quantized', (progress) => {
+  console.log(`${progress.file}: ${progress.percent}%`);
+});
+
+// List downloaded models
+const models = await listDownloadedModels();
+// ['quantized']
+
+// Clear specific model
+await clearModelCache('quantized');
+
+// Clear all models
+await clearModelCache();
+```
+
+## Custom Models
+
+Use your own ONNX model:
+
+```typescript
+const anonymizer = createAnonymizer({
+  ner: {
+    mode: 'custom',
+    modelPath: './my-model.onnx',
+    vocabPath: './vocab.txt',
+  }
+});
+```
+
+<Note>
+Custom models must follow the same input/output format as the default models. See the [model training guide](https://github.com/rehydra-ai/rehydra-sdk#building-custom-models) for details.
+</Note>
+
+## Cache Locations
+
+Models are cached locally for offline use:
+
+### Node.js
+
+| Platform | Location |
+|----------|----------|
+| macOS | `~/Library/Caches/rehydra/models/` |
+| Linux | `~/.cache/rehydra/models/` |
+| Windows | `%LOCALAPPDATA%/rehydra/models/` |
+
+### Browser
+
+In browsers, models are stored using:
+- **Origin Private File System (OPFS)** for large model files
+- **IndexedDB** for metadata
+
+Data persists across page reloads and browser sessions.
+
+## NER-Detected Types
+
+| Type | Examples |
+|------|----------|
+| `PERSON` | John Smith, Maria, Dr. Johnson |
+| `ORG` | Acme Corp, Google, United Nations |
+| `LOCATION` | Berlin, Germany, Central Park |
+| `ADDRESS` | 123 Main Street |
+| `DATE_OF_BIRTH` | born on March 15, 1990 |
+
+## Disabling Specific NER Types
+
+Detect only certain entity types:
+
+```typescript
+import { createAnonymizer, PIIType } from 'rehydra';
+
+const anonymizer = createAnonymizer({
+  ner: { mode: 'quantized' },
+  defaultPolicy: {
+    nerEnabledTypes: new Set([
+      PIIType.PERSON,  // Only detect names
+    ])
+  }
+});
+```
+
+## Performance Tips
+
+<AccordionGroup>
+  <Accordion title="Reuse the anonymizer instance">
+    Model loading is expensive. Create once and reuse:
+    
+    ```typescript
+    // ✅ Good: create once
+    const anonymizer = createAnonymizer({ ner: { mode: 'quantized' } });
+    await anonymizer.initialize();
+    
+    // Reuse for multiple texts
+    await anonymizer.anonymize(text1);
+    await anonymizer.anonymize(text2);
+    
+    // Dispose when done
+    await anonymizer.dispose();
+    ```
+  </Accordion>
+  
+  <Accordion title="Use quantized model for most cases">
+    The quantized model is ~95% as accurate but 4x smaller:
+    
+    | Model | Size | Inference Time |
+    |-------|------|---------------|
+    | Standard | ~1.1 GB | ~120ms |
+    | Quantized | ~280 MB | ~100ms |
+  </Accordion>
+  
+  <Accordion title="Skip NER for structured-only PII">
+    If you only need emails, phones, IBANs, etc.:
+    
+    ```typescript
+    import { anonymizeRegexOnly } from 'rehydra';
+    
+    const result = await anonymizeRegexOnly(text);
+    // ~5ms instead of ~150ms
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Semantic Enrichment" icon="tags" href="/guides/semantic-enrichment">
+    Add gender and location attributes
+  </Card>
+  <Card title="Custom Recognizers" icon="code" href="/guides/custom-recognizers">
+    Add domain-specific detection patterns
+  </Card>
+</CardGroup>
+

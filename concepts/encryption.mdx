@@ -1,0 +1,226 @@
+---
+title: "Encryption & Security"
+description: "How Rehydra secures PII data with AES-256-GCM encryption"
+---
+
+The PII map containing original values is encrypted using **AES-256-GCM** via the Web Crypto API, which works in both Node.js and browsers.
+
+## How It Works
+
+When you anonymize text, Rehydra:
+
+1. Builds a mapping of placeholder IDs to original values
+2. Serializes the map to JSON
+3. Encrypts using AES-256-GCM with a random IV
+4. Returns the encrypted bundle
+
+```typescript
+const result = await anonymizer.anonymize('Contact john@example.com');
+
+// The encrypted PII map
+result.piiMap = {
+  ciphertext: "a3f2...",  // Base64-encoded encrypted data
+  iv: "7d8c...",          // Base64-encoded initialization vector
+  authTag: "9e1f..."      // Base64-encoded authentication tag
+};
+```
+
+## Key Providers
+
+Rehydra uses a `KeyProvider` interface for flexible key management:
+
+### InMemoryKeyProvider (Development)
+
+Generates a random key on instantiation. Key is lost on page refresh.
+
+```typescript
+import { InMemoryKeyProvider } from 'rehydra';
+
+const keyProvider = new InMemoryKeyProvider();
+
+const anonymizer = createAnonymizer({
+  keyProvider
+});
+```
+
+<Warning>
+Only use `InMemoryKeyProvider` for development/testing. The key is lost when the process ends.
+</Warning>
+
+### ConfigKeyProvider (Production)
+
+Uses a pre-configured key from your environment:
+
+```typescript
+import { ConfigKeyProvider } from 'rehydra';
+
+// Generate key: openssl rand -base64 32
+const keyBase64 = process.env.PII_ENCRYPTION_KEY;
+const keyProvider = new ConfigKeyProvider(keyBase64);
+
+const anonymizer = createAnonymizer({
+  keyProvider
+});
+```
+
+### Custom KeyProvider
+
+Implement the interface for custom storage:
+
+```typescript
+import { KeyProvider } from 'rehydra';
+
+class SecureKeyProvider implements KeyProvider {
+  async getKey(): Promise<Uint8Array> {
+    // Retrieve from secure storage, HSM, keychain, etc.
+    return await getKeyFromSecureStorage();
+  }
+}
+```
+
+## Decryption and Rehydration
+
+To restore original values, decrypt the PII map and rehydrate:
+
+```typescript
+import { decryptPIIMap, rehydrate } from 'rehydra';
+
+// Get the key (must be the same key used for encryption)
+const key = await keyProvider.getKey();
+
+// Decrypt the PII map
+const piiMap = await decryptPIIMap(result.piiMap, key);
+// Returns Map<string, string> where key is "EMAIL:1" and value is "john@example.com"
+
+// Replace placeholders with original values
+const original = rehydrate(translatedText, piiMap);
+```
+
+## Key Generation
+
+Generate a secure 256-bit key:
+
+```typescript
+import { generateKey } from 'rehydra';
+
+// Generate random key (returns Uint8Array)
+const key = generateKey();
+```
+
+Or via command line:
+
+```bash
+# Generate base64-encoded key for ConfigKeyProvider
+openssl rand -base64 32
+```
+
+## Key Derivation
+
+Derive a key from a password:
+
+```typescript
+import { deriveKey, generateSalt } from 'rehydra';
+
+const password = 'user-password';
+const salt = generateSalt();  // Store this with the encrypted data
+
+const key = await deriveKey(password, salt);
+```
+
+## Security Best Practices
+
+<AccordionGroup>
+  <Accordion title="Never log the raw PII map">
+    Always use the encrypted storage. Never log or expose the decrypted `piiMap`.
+    
+    ```typescript
+    // ❌ Never do this
+    console.log(piiMap);
+    
+    // ✅ Safe to log
+    console.log(result.piiMap);  // Only encrypted data
+    ```
+  </Accordion>
+  
+  <Accordion title="Persist keys securely">
+    Use platform-specific secure storage:
+    
+    - **iOS**: Keychain
+    - **Android**: Keystore
+    - **Desktop**: OS keychain (via `keytar` or similar)
+    - **Server**: Environment variables, secrets manager
+  </Accordion>
+  
+  <Accordion title="Implement key rotation">
+    For long-running applications, rotate keys periodically:
+    
+    ```typescript
+    // 1. Decrypt with old key
+    const piiMap = await decryptPIIMap(oldEncrypted, oldKey);
+    
+    // 2. Re-encrypt with new key
+    const newEncrypted = await encryptPIIMap(piiMap, newKey);
+    
+    // 3. Store new encrypted data
+    await storage.save(sessionId, newEncrypted);
+    ```
+  </Accordion>
+  
+  <Accordion title="Enable leak scanning">
+    Catch any missed PII in output:
+    
+    ```typescript
+    const anonymizer = createAnonymizer({
+      defaultPolicy: {
+        enableLeakScan: true
+      }
+    });
+    
+    // Check result
+    if (!result.stats.leakScanPassed) {
+      console.warn('Potential PII leak detected');
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Crypto Utilities
+
+Additional cryptographic utilities:
+
+```typescript
+import { 
+  uint8ArrayToBase64,
+  base64ToUint8Array,
+  validateKey,
+  secureCompare 
+} from 'rehydra';
+
+// Convert key to base64 for storage
+const keyBase64 = uint8ArrayToBase64(key);
+
+// Restore key from base64
+const key = base64ToUint8Array(keyBase64);
+
+// Validate key format and length
+if (!validateKey(key)) {
+  throw new Error('Invalid encryption key');
+}
+
+// Constant-time comparison (prevents timing attacks)
+if (secureCompare(key1, key2)) {
+  console.log('Keys match');
+}
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Sessions & Storage" icon="database" href="/guides/sessions-storage">
+    Persist encrypted PII maps across requests
+  </Card>
+  <Card title="API Reference" icon="book" href="/api-reference/crypto">
+    Complete crypto API documentation
+  </Card>
+</CardGroup>
+

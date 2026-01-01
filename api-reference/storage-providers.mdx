@@ -1,0 +1,280 @@
+---
+title: "Storage Providers"
+description: "Persist encrypted PII maps across requests"
+---
+
+Storage providers enable persistent storage of encrypted PII maps for multi-turn conversations or cross-request rehydration.
+
+## Available Providers
+
+| Provider | Environment | Persistence |
+|----------|-------------|-------------|
+| `InMemoryPIIStorageProvider` | All | None (lost on restart) |
+| `SQLitePIIStorageProvider` | Node.js, Bun | File-based |
+| `IndexedDBPIIStorageProvider` | Browser | Browser storage |
+
+---
+
+## InMemoryPIIStorageProvider
+
+Simple in-memory storage for development and testing.
+
+```typescript
+import { InMemoryPIIStorageProvider } from 'rehydra';
+
+const storage = new InMemoryPIIStorageProvider();
+// No initialization needed
+```
+
+<Warning>
+Data is lost when the process ends. Use only for development/testing.
+</Warning>
+
+---
+
+## SQLitePIIStorageProvider
+
+Persistent file-based storage for Node.js and Bun.
+
+### Import
+
+```typescript
+import { SQLitePIIStorageProvider } from 'rehydra';
+// Or explicitly:
+import { SQLitePIIStorageProvider } from 'rehydra/storage/sqlite';
+```
+
+### Usage
+
+```typescript
+// File-based database
+const storage = new SQLitePIIStorageProvider('./data/pii-maps.db');
+await storage.initialize();
+
+// In-memory database (for testing)
+const testStorage = new SQLitePIIStorageProvider(':memory:');
+await testStorage.initialize();
+```
+
+### Dependencies
+
+| Runtime | Dependency |
+|---------|------------|
+| Bun | Built-in `bun:sqlite` (no install needed) |
+| Node.js | `better-sqlite3` |
+
+```bash
+# Node.js only
+npm install better-sqlite3
+```
+
+<Note>
+`SQLitePIIStorageProvider` is **not available in browser builds**. The browser entry point excludes it to avoid bundling Node.js dependencies.
+</Note>
+
+---
+
+## IndexedDBPIIStorageProvider
+
+Browser-native storage using IndexedDB.
+
+```typescript
+import { IndexedDBPIIStorageProvider } from 'rehydra';
+
+// Default database name
+const storage = new IndexedDBPIIStorageProvider();
+
+// Custom database name
+const storage = new IndexedDBPIIStorageProvider('my-app-pii');
+```
+
+### Features
+
+- Persists across page reloads
+- Persists across browser sessions
+- Cleared with "Clear site data"
+- Quota managed by browser
+
+---
+
+## PIIStorageProvider Interface
+
+All providers implement this interface:
+
+```typescript
+interface PIIStorageProvider {
+  /**
+   * Initialize the storage (create tables, etc.)
+   */
+  initialize(): Promise<void>;
+  
+  /**
+   * Save a PII map
+   */
+  save(sessionId: string, data: StoredPIIMap): Promise<void>;
+  
+  /**
+   * Load a PII map
+   */
+  load(sessionId: string): Promise<StoredPIIMap | null>;
+  
+  /**
+   * Delete a PII map
+   */
+  delete(sessionId: string): Promise<boolean>;
+  
+  /**
+   * Check if a session exists
+   */
+  exists(sessionId: string): Promise<boolean>;
+  
+  /**
+   * List all session IDs
+   */
+  list(options?: ListOptions): Promise<string[]>;
+  
+  /**
+   * Delete entries older than a date
+   */
+  cleanup(olderThan: Date): Promise<number>;
+  
+  /**
+   * Close the storage connection
+   */
+  close(): Promise<void>;
+}
+```
+
+---
+
+## StoredPIIMap Structure
+
+```typescript
+interface StoredPIIMap {
+  // Encrypted PII data
+  encrypted: {
+    ciphertext: string;
+    iv: string;
+    authTag: string;
+  };
+  
+  // Metadata
+  metadata: {
+    createdAt: Date;
+    updatedAt: Date;
+    entityCount: number;
+    types: PIIType[];
+  };
+}
+```
+
+---
+
+## Integration with Anonymizer
+
+```typescript
+import { 
+  createAnonymizer,
+  InMemoryKeyProvider,
+  SQLitePIIStorageProvider
+} from 'rehydra';
+
+const storage = new SQLitePIIStorageProvider('./pii.db');
+await storage.initialize();
+
+const anonymizer = createAnonymizer({
+  ner: { mode: 'quantized' },
+  keyProvider: new InMemoryKeyProvider(),
+  piiStorageProvider: storage,  // Enable session support
+});
+
+await anonymizer.initialize();
+
+// Now you can use sessions
+const session = anonymizer.session('conversation-id');
+```
+
+---
+
+## Direct Storage Operations
+
+You can use storage providers directly:
+
+```typescript
+const storage = new SQLitePIIStorageProvider('./pii.db');
+await storage.initialize();
+
+// List all sessions
+const sessionIds = await storage.list();
+
+// List with pagination
+const page = await storage.list({ limit: 10, offset: 0 });
+
+// Check existence
+if (await storage.exists('session-123')) {
+  const data = await storage.load('session-123');
+}
+
+// Delete old data
+const deleted = await storage.cleanup(new Date(Date.now() - 7 * 24 * 60 * 60 * 1000));
+console.log(`Deleted ${deleted} old entries`);
+
+// Close connection
+await storage.close();
+```
+
+---
+
+## Custom Storage Provider
+
+Implement the interface for custom storage:
+
+```typescript
+import { PIIStorageProvider, StoredPIIMap } from 'rehydra';
+
+class RedisStorageProvider implements PIIStorageProvider {
+  private client: RedisClient;
+  
+  async initialize(): Promise<void> {
+    this.client = await createRedisClient();
+  }
+  
+  async save(sessionId: string, data: StoredPIIMap): Promise<void> {
+    await this.client.set(`pii:${sessionId}`, JSON.stringify(data));
+  }
+  
+  async load(sessionId: string): Promise<StoredPIIMap | null> {
+    const raw = await this.client.get(`pii:${sessionId}`);
+    return raw ? JSON.parse(raw) : null;
+  }
+  
+  async delete(sessionId: string): Promise<boolean> {
+    return (await this.client.del(`pii:${sessionId}`)) > 0;
+  }
+  
+  async exists(sessionId: string): Promise<boolean> {
+    return (await this.client.exists(`pii:${sessionId}`)) > 0;
+  }
+  
+  async list(): Promise<string[]> {
+    const keys = await this.client.keys('pii:*');
+    return keys.map(k => k.replace('pii:', ''));
+  }
+  
+  async cleanup(olderThan: Date): Promise<number> {
+    // Implement based on your needs
+    return 0;
+  }
+  
+  async close(): Promise<void> {
+    await this.client.quit();
+  }
+}
+```
+
+## Related
+
+- [Sessions](/api-reference/sessions) - Session-based API
+- [Sessions & Storage Guide](/guides/sessions-storage) - Usage guide
+- [Browser Usage](/guides/browser-usage) - Browser-specific storage
+

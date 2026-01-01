@@ -1,0 +1,248 @@
+---
+title: "Crypto Utilities"
+description: "Encryption and key management functions"
+---
+
+Rehydra uses AES-256-GCM encryption via the Web Crypto API for securing PII maps.
+
+## Key Providers
+
+### InMemoryKeyProvider
+
+Generates a random key in memory. Key is lost when the process ends.
+
+```typescript
+import { InMemoryKeyProvider } from 'rehydra';
+
+const keyProvider = new InMemoryKeyProvider();
+const key = await keyProvider.getKey();  // Uint8Array (32 bytes)
+```
+
+<Warning>
+Only for development/testing. The key is not persisted.
+</Warning>
+
+### ConfigKeyProvider
+
+Uses a pre-configured key from your environment.
+
+```typescript
+import { ConfigKeyProvider } from 'rehydra';
+
+// Generate key: openssl rand -base64 32
+const keyBase64 = process.env.PII_ENCRYPTION_KEY;
+const keyProvider = new ConfigKeyProvider(keyBase64);
+```
+
+### KeyProvider Interface
+
+```typescript
+interface KeyProvider {
+  getKey(): Promise<Uint8Array>;
+}
+```
+
+Implement for custom key storage:
+
+```typescript
+class VaultKeyProvider implements KeyProvider {
+  async getKey(): Promise<Uint8Array> {
+    const secret = await vault.getSecret('pii-encryption-key');
+    return base64ToUint8Array(secret);
+  }
+}
+```
+
+---
+
+## Encryption Functions
+
+### encryptPIIMap()
+
+Encrypts a PII map.
+
+```typescript
+import { encryptPIIMap } from 'rehydra';
+
+const piiMap = new Map([
+  ['EMAIL:1', 'john@example.com'],
+  ['PERSON:1', 'John Smith'],
+]);
+
+const encrypted = await encryptPIIMap(piiMap, key);
+// { ciphertext: '...', iv: '...', authTag: '...' }
+```
+
+### decryptPIIMap()
+
+Decrypts a PII map.
+
+```typescript
+import { decryptPIIMap } from 'rehydra';
+
+const piiMap = await decryptPIIMap(encrypted, key);
+// Map { 'EMAIL:1' => 'john@example.com', ... }
+```
+
+---
+
+## Key Generation
+
+### generateKey()
+
+Generate a random 256-bit key.
+
+```typescript
+import { generateKey } from 'rehydra';
+
+const key = generateKey();  // Uint8Array (32 bytes)
+```
+
+### generateSalt()
+
+Generate a random salt for key derivation.
+
+```typescript
+import { generateSalt } from 'rehydra';
+
+const salt = generateSalt();  // Uint8Array (16 bytes)
+```
+
+### deriveKey()
+
+Derive a key from a password using PBKDF2.
+
+```typescript
+import { deriveKey, generateSalt } from 'rehydra';
+
+const password = 'user-password';
+const salt = generateSalt();
+
+const key = await deriveKey(password, salt);
+// Store salt with encrypted data for later derivation
+```
+
+---
+
+## Utility Functions
+
+### validateKey()
+
+Check if a key is valid.
+
+```typescript
+import { validateKey } from 'rehydra';
+
+if (validateKey(key)) {
+  console.log('Key is valid');
+} else {
+  throw new Error('Invalid key');
+}
+```
+
+### secureCompare()
+
+Constant-time comparison to prevent timing attacks.
+
+```typescript
+import { secureCompare } from 'rehydra';
+
+if (secureCompare(key1, key2)) {
+  console.log('Keys match');
+}
+```
+
+### uint8ArrayToBase64()
+
+Convert Uint8Array to Base64.
+
+```typescript
+import { uint8ArrayToBase64 } from 'rehydra';
+
+const base64 = uint8ArrayToBase64(key);
+// Store this string securely
+```
+
+### base64ToUint8Array()
+
+Convert Base64 to Uint8Array.
+
+```typescript
+import { base64ToUint8Array } from 'rehydra';
+
+const key = base64ToUint8Array(base64);
+```
+
+---
+
+## EncryptedPIIMap Structure
+
+```typescript
+interface EncryptedPIIMap {
+  ciphertext: string;  // Base64-encoded encrypted data
+  iv: string;          // Base64-encoded initialization vector
+  authTag: string;     // Base64-encoded authentication tag
+}
+```
+
+---
+
+## Complete Example
+
+```typescript
+import { 
+  generateKey,
+  encryptPIIMap,
+  decryptPIIMap,
+  uint8ArrayToBase64,
+  base64ToUint8Array
+} from 'rehydra';
+
+// Generate and store key
+const key = generateKey();
+const keyBase64 = uint8ArrayToBase64(key);
+// Store keyBase64 securely (env var, keychain, etc.)
+
+// Later: encrypt
+const piiMap = new Map([['EMAIL:1', 'secret@example.com']]);
+const encrypted = await encryptPIIMap(piiMap, key);
+
+// Later: decrypt
+const restoredKey = base64ToUint8Array(keyBase64);
+const decrypted = await decryptPIIMap(encrypted, restoredKey);
+```
+
+---
+
+## Security Notes
+
+<AccordionGroup>
+  <Accordion title="Key Storage">
+    - Never commit keys to version control
+    - Use environment variables or secrets managers
+    - Consider platform keystores (iOS Keychain, Android Keystore)
+  </Accordion>
+  
+  <Accordion title="Key Rotation">
+    Implement key rotation for long-running applications:
+    
+    ```typescript
+    // Re-encrypt with new key
+    const piiMap = await decryptPIIMap(encrypted, oldKey);
+    const newEncrypted = await encryptPIIMap(piiMap, newKey);
+    ```
+  </Accordion>
+  
+  <Accordion title="Browser Security">
+    In browsers:
+    - Keys in memory can be accessed by malicious scripts
+    - Consider using SubtleCrypto key wrapping
+    - Clear keys when no longer needed
+  </Accordion>
+</AccordionGroup>
+
+## Related
+
+- [Encryption Concept](/concepts/encryption) - How encryption works
+- [createAnonymizer](/api-reference/create-anonymizer) - Key provider configuration
+

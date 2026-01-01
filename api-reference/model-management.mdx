@@ -1,0 +1,274 @@
+---
+title: "Model Management"
+description: "Download, cache, and manage NER models"
+---
+
+Rehydra provides utilities for managing NER model downloads and cache.
+
+## Model Information
+
+### Available Models
+
+| Mode | Model Name | Size | Description |
+|------|------------|------|-------------|
+| `'quantized'` | quantized | ~280 MB | Smaller, ~95% accuracy |
+| `'standard'` | standard | ~1.1 GB | Full model, best accuracy |
+
+### Model Files
+
+Each model includes:
+- `model.onnx` - The ONNX model file
+- `vocab.txt` - WordPiece vocabulary
+- `label_map.json` - Entity label mapping
+
+---
+
+## Check Model Status
+
+### isModelDownloaded()
+
+Check if a model is cached locally.
+
+```typescript
+import { isModelDownloaded } from 'rehydra';
+
+const hasQuantized = await isModelDownloaded('quantized');
+const hasStandard = await isModelDownloaded('standard');
+
+console.log(`Quantized: ${hasQuantized}, Standard: ${hasStandard}`);
+```
+
+### listDownloadedModels()
+
+List all cached models.
+
+```typescript
+import { listDownloadedModels } from 'rehydra';
+
+const models = await listDownloadedModels();
+// ['quantized'] or ['quantized', 'standard'] or []
+```
+
+---
+
+## Download Models
+
+### downloadModel()
+
+Manually download a model.
+
+```typescript
+import { downloadModel } from 'rehydra';
+
+await downloadModel('quantized', (progress) => {
+  console.log(`${progress.file}: ${progress.percent}%`);
+});
+```
+
+### ensureModel()
+
+Download if not present, return paths.
+
+```typescript
+import { ensureModel } from 'rehydra';
+
+const { modelPath, vocabPath, labelMapPath } = await ensureModel('quantized', {
+  autoDownload: true,
+  onProgress: (p) => console.log(`${p.file}: ${p.percent}%`),
+  onStatus: (s) => console.log(s),
+});
+```
+
+---
+
+## Clear Cache
+
+### clearModelCache()
+
+Remove cached models.
+
+```typescript
+import { clearModelCache } from 'rehydra';
+
+// Clear specific model
+await clearModelCache('quantized');
+
+// Clear all models
+await clearModelCache();
+```
+
+---
+
+## Cache Locations
+
+### getModelCacheDir()
+
+Get the cache directory path.
+
+```typescript
+import { getModelCacheDir } from 'rehydra';
+
+const cacheDir = getModelCacheDir();
+```
+
+### Node.js Locations
+
+| Platform | Location |
+|----------|----------|
+| macOS | `~/Library/Caches/rehydra/models/` |
+| Linux | `~/.cache/rehydra/models/` |
+| Windows | `%LOCALAPPDATA%/rehydra/models/` |
+
+### Browser Storage
+
+- **OPFS (Origin Private File System)** for model files
+- Data persists across sessions
+
+---
+
+## Semantic Data Management
+
+Similar functions exist for semantic enrichment data:
+
+```typescript
+import { 
+  isSemanticDataDownloaded,
+  downloadSemanticData,
+  clearSemanticDataCache,
+  getSemanticDataCacheDir,
+  getSemanticDataInfo,
+} from 'rehydra';
+
+// Check status
+const hasData = await isSemanticDataDownloaded();
+
+// Download with progress
+await downloadSemanticData((progress) => {
+  console.log(`${progress.file}: ${progress.percent}%`);
+});
+
+// Get info
+const info = getSemanticDataInfo();
+// { files: [...], totalSize: 12000000 }
+
+// Clear cache
+await clearSemanticDataCache();
+```
+
+---
+
+## Download Progress Callback
+
+```typescript
+interface DownloadProgress {
+  file: string;      // Current file name
+  percent: number;   // 0-100
+  loaded: number;    // Bytes loaded
+  total: number;     // Total bytes
+}
+```
+
+Example usage:
+
+```typescript
+const anonymizer = createAnonymizer({
+  ner: {
+    mode: 'quantized',
+    onDownloadProgress: (progress) => {
+      const bar = '█'.repeat(progress.percent / 5) + '░'.repeat(20 - progress.percent / 5);
+      console.log(`${progress.file}: [${bar}] ${progress.percent}%`);
+    }
+  }
+});
+```
+
+---
+
+## Pre-Warming
+
+Download models before user interaction:
+
+```typescript
+// On app start
+async function preWarmModels() {
+  const hasModel = await isModelDownloaded('quantized');
+  if (!hasModel) {
+    console.log('Downloading NER model...');
+    await downloadModel('quantized', console.log);
+  }
+  
+  const hasSemanticData = await isSemanticDataDownloaded();
+  if (!hasSemanticData) {
+    console.log('Downloading semantic data...');
+    await downloadSemanticData(console.log);
+  }
+  
+  console.log('Models ready!');
+}
+```
+
+---
+
+## Model Registry
+
+Access model metadata:
+
+```typescript
+import { MODEL_REGISTRY } from 'rehydra';
+
+console.log(MODEL_REGISTRY);
+// {
+//   quantized: {
+//     name: 'quantized',
+//     files: ['model.onnx', 'vocab.txt', 'label_map.json'],
+//     baseUrl: 'https://...',
+//     ...
+//   },
+//   standard: { ... }
+// }
+```
+
+---
+
+## Offline Usage
+
+After initial download, models work offline:
+
+```typescript
+// First run: downloads (~30 seconds on fast connection)
+await anonymizer.initialize();
+
+// Subsequent runs: instant (cached)
+await anonymizer.initialize();  // ~100ms
+```
+
+---
+
+## Custom Models
+
+Use your own ONNX model:
+
+```typescript
+const anonymizer = createAnonymizer({
+  ner: {
+    mode: 'custom',
+    modelPath: './my-model.onnx',
+    vocabPath: './my-vocab.txt',
+  }
+});
+```
+
+### Model Requirements
+
+- **Format**: ONNX
+- **Input**: Token IDs, attention mask
+- **Output**: Logits for BIO-tagged entities
+- **Vocab**: WordPiece format
+
+See [Building Custom Models](https://github.com/rehydra-ai/rehydra-sdk#building-custom-models) for details.
+
+## Related
+
+- [NER Detection Guide](/guides/ner-detection) - NER configuration
+- [createAnonymizer](/api-reference/create-anonymizer) - NER config options
+
