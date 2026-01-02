@@ -1,13 +1,13 @@
 {
   "$schema": "https://mintlify.com/docs.json",
   "theme": "mint",
-  "name": "Rehydra",
+  "name": "rehydra.ai",
   "colors": {
     "primary": "#0EA5E9",
     "light": "#38BDF8",
     "dark": "#0284C7"
   },
-  "favicon": "/favicon.svg",
+  "favicon": "/favicon.ico",
   "navigation": {
     "tabs": [
       {
@@ -109,7 +109,8 @@
   },
   "footer": {
     "socials": {
-      "github": "https://github.com/rehydra-ai"
+      "github": "https://github.com/rehydra-ai/rehydra-sdk",
+      "twitter": "https://twitter.com/rehydra_ai"
     }
   }
 }
