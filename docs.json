@@ -32,6 +32,7 @@
           {
             "group": "Guides",
             "pages": [
+              "guides/cli",
               "guides/ner-detection",
               "guides/semantic-enrichment",
               "guides/sessions-storage",

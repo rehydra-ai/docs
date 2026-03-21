@@ -1,0 +1,205 @@
+---
+title: "CLI Tool"
+description: "Anonymize, rehydrate, and inspect PII from the terminal"
+---
+
+The Rehydra CLI lets you anonymize files and piped text directly from the terminal — no code required.
+
+## Installation
+
+The CLI is published as a separate lightweight package:
+
+```bash
+npm install -g @rehydra/cli
+```
+
+Or run directly with npx:
+
+```bash
+npx @rehydra/cli anonymize input.txt
+```
+
+<Note>
+The CLI requires Node.js 18+ and depends on the `rehydra` SDK package (installed automatically).
+</Note>
+
+## Commands
+
+### anonymize
+
+Detect and replace PII in a file or stdin.
+
+```bash
+# Anonymize a file
+rehydra anonymize input.txt -o output.txt
+
+# Pipe from stdin
+echo "Contact john@example.com" | rehydra anonymize
+
+# With NER (detects names, orgs, locations)
+rehydra anonymize input.txt --ner quantized
+
+# JSON output
+rehydra anonymize input.txt -f json
+
+# Only detect specific types
+rehydra anonymize input.txt --types EMAIL,PHONE,IBAN
+
+# Irreversible mode (no PII map saved)
+rehydra anonymize input.txt --mode anonymize
+```
+
+By default, the anonymize command:
+- Uses regex-only detection (no NER)
+- Runs in `pseudonymize` mode (saves an encrypted PII map for later rehydration)
+- Writes the PII map to `.rehydra-pii-map.json`
+- Generates a random encryption key and stores it in the PII map file
+
+### rehydrate
+
+Restore original PII values from anonymized text using the saved PII map.
+
+```bash
+# Rehydrate using the default PII map file
+rehydra rehydrate anonymized.txt
+
+# Specify a PII map file
+rehydra rehydrate anonymized.txt --pii-map my-pii-map.json
+
+# Use an explicit key (if not stored in the PII map file)
+rehydra rehydrate anonymized.txt --key <base64-key>
+```
+
+The encryption key is resolved in order: `--key` flag, `REHYDRA_KEY` environment variable, then the key embedded in the PII map file.
+
+### inspect
+
+Dry-run that shows detected PII highlighted in context without anonymizing. Useful for previewing what will be detected.
+
+```bash
+# Inspect a file
+rehydra inspect input.txt
+
+# With NER
+rehydra inspect input.txt --ner quantized
+```
+
+Output shows the original text with PII highlighted and labeled by type using color coding.
+
+### setup-ner
+
+Download the NER model ahead of time so anonymize/inspect don't need to download on first use.
+
+```bash
+# Download quantized model (~280 MB)
+rehydra setup-ner
+
+# Download standard model (~1.1 GB)
+rehydra setup-ner --ner standard
+```
+
+## Round-Trip Example
+
+```bash
+# 1. Anonymize
+rehydra anonymize letter.txt -o anonymized.txt --ner quantized
+
+# 2. Process the anonymized text (e.g., translate externally)
+# ... PII placeholders are preserved by most tools ...
+
+# 3. Rehydrate
+rehydra rehydrate translated.txt -o final.txt
+```
+
+## Options Reference
+
+| Flag | Short | Default | Description |
+|------|-------|---------|-------------|
+| `--output <file>` | `-o` | stdout | Output file |
+| `--format <fmt>` | `-f` | `text` | Output format: `text`, `json`, `ndjson` |
+| `--ner <mode>` | | `disabled` | NER mode: `disabled`, `quantized`, `standard` |
+| `--pii-map <file>` | | `.rehydra-pii-map.json` | PII map file path |
+| `--key <key>` | | | Encryption key (base64), or set `REHYDRA_KEY` env var |
+| `--types <types>` | | all | Comma-separated PII types to detect |
+| `--mode <mode>` | | `pseudonymize` | `pseudonymize` (reversible) or `anonymize` (irreversible) |
+| `--locale <locale>` | | | Locale hint (e.g., `de-DE`) |
+| `--no-color` | | | Disable colored output |
+| `--verbose` | | | Show detection statistics |
+| `--quiet` | `-q` | | Suppress non-essential output |
+| `--help` | `-h` | | Show help |
+| `--version` | `-V` | | Show version |
+
+## Output Formats
+
+### text (default)
+
+Returns the anonymized text as-is:
+
+```
+Contact <PII type="EMAIL" id="1"/> or call <PII type="PHONE" id="1"/>.
+```
+
+### json
+
+Structured JSON with anonymized text, entities, and stats:
+
+```json
+{
+  "anonymizedText": "Contact <PII type=\"EMAIL\" id=\"1\"/>...",
+  "entities": [
+    { "type": "EMAIL", "id": 1, "confidence": 0.95, "source": "REGEX" }
+  ],
+  "stats": {
+    "totalEntities": 1,
+    "countsByType": { "EMAIL": 1 },
+    "processingTimeMs": 5
+  }
+}
+```
+
+### ndjson
+
+One JSON line per entity, plus a summary line — useful for streaming pipelines:
+
+```
+{"type":"EMAIL","id":1,"confidence":0.95,"source":"REGEX"}
+{"_type":"summary","anonymizedText":"...","totalEntities":1,"processingTimeMs":5}
+```
+
+## Encryption Key Management
+
+By default, `rehydra anonymize` generates a random key and embeds it in the PII map file. For production use, supply your own key:
+
+```bash
+# Generate a key
+openssl rand -base64 32
+
+# Use via environment variable
+export REHYDRA_KEY="your-base64-key"
+rehydra anonymize input.txt
+
+# Or via flag (key is NOT stored in the PII map file)
+rehydra anonymize input.txt --key "your-base64-key"
+rehydra rehydrate output.txt --key "your-base64-key"
+```
+
+When you provide a key via `--key` or `REHYDRA_KEY`, it is **not** written to the PII map file, keeping it separate from the encrypted data.
+
+## Exit Codes
+
+| Code | Meaning |
+|------|---------|
+| `0` | Success (PII found and processed) |
+| `1` | Error |
+| `2` | Success but no PII detected |
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Quick Start" icon="play" href="/quickstart">
+    Use Rehydra programmatically in your app
+  </Card>
+  <Card title="PII Types" icon="shield" href="/concepts/pii-types">
+    See all PII types the CLI can detect
+  </Card>
+</CardGroup>
