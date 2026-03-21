@@ -35,6 +35,8 @@
               "guides/ner-detection",
               "guides/semantic-enrichment",
               "guides/sessions-storage",
+              "guides/streaming",
+              "guides/llm-proxy",
               "guides/browser-usage",
               "guides/custom-recognizers"
             ]
@@ -63,6 +65,13 @@
             "pages": [
               "api-reference/storage-providers",
               "api-reference/sessions"
+            ]
+          },
+          {
+            "group": "Streaming & Proxy",
+            "pages": [
+              "api-reference/streaming",
+              "api-reference/proxy"
             ]
           },
           {

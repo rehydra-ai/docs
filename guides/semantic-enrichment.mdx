@@ -48,6 +48,7 @@ console.log(result.anonymizedText);
 | `gender="male"` | Masculine name | John, Michael, Hans |
 | `gender="female"` | Feminine name | Maria, Sarah, Anna |
 | `gender="neutral"` | Ambiguous/unknown | Alex, Jordan, Sam |
+| `gender="unknown"` | Not found in database | — |
 
 ### Location Scope
 
@@ -56,13 +57,16 @@ console.log(result.anonymizedText);
 | `scope="city"` | City/town | Berlin, Paris, Tokyo |
 | `scope="country"` | Country | Germany, France, Japan |
 | `scope="region"` | Region/state | Bavaria, California, Hokkaido |
+| `scope="unknown"` | Not found in database | — |
 
 ## Semantic Data
 
-Semantic enrichment uses lookup databases (~12 MB total):
+Semantic enrichment uses lookup databases (~4 MB total):
 
-- **Name database**: First names with gender associations
-- **Location database**: Cities, countries, regions with classifications
+- **Name database**: 40K+ first names with gender associations (from gender-guesser)
+- **City database**: 25K+ cities from GeoNames (population > 15K)
+- **Country database**: Country names and ISO codes
+- **Region database**: First-level administrative divisions
 
 ### First-Use Download
 

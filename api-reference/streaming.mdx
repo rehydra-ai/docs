@@ -1,0 +1,186 @@
+---
+title: "Streaming"
+description: "Streaming anonymization API reference"
+---
+
+Stream-based anonymization for processing text chunk by chunk. Available in Node.js and Bun only.
+
+## Import
+
+```typescript
+import { createAnonymizerStream, AnonymizerStream, SentenceBuffer } from 'rehydra/streaming';
+```
+
+---
+
+## createAnonymizerStream()
+
+Factory function that creates and initializes a streaming anonymizer.
+
+### Signature
+
+```typescript
+function createAnonymizerStream(config?: StreamConfig): Promise<AnonymizerStream>
+```
+
+### Parameters
+
+<ParamField path="config" type="StreamConfig">
+  <Expandable title="StreamConfig properties">
+    <ParamField path="anonymizer" type="AnonymizerConfig">
+      Anonymizer configuration (same options as `createAnonymizer`)
+    </ParamField>
+    <ParamField path="policy" type="Partial<AnonymizationPolicy>">
+      Policy override for the stream
+    </ParamField>
+    <ParamField path="locale" type="string">
+      Locale hint (e.g., `'de-DE'`)
+    </ParamField>
+    <ParamField path="buffer" type="SentenceBufferConfig">
+      Buffer configuration for sentence detection
+      <Expandable title="SentenceBufferConfig properties">
+        <ParamField path="overlapChars" type="number" default="100">
+          Characters of overlap between buffer flushes for NER context
+        </ParamField>
+        <ParamField path="maxBufferSize" type="number" default="8192">
+          Force flush when buffer reaches this size
+        </ParamField>
+        <ParamField path="minBufferSize" type="number" default="50">
+          Minimum buffer size before allowing flush
+        </ParamField>
+        <ParamField path="lowLatency" type="boolean" default="false">
+          Enable low-latency mode (disables NER, reduces buffer sizes)
+        </ParamField>
+        <ParamField path="sentenceBoundary" type="RegExp">
+          Custom regex for sentence boundary detection
+        </ParamField>
+      </Expandable>
+    </ParamField>
+    <ParamField path="sessionId" type="string">
+      Session ID for PII map persistence
+    </ParamField>
+    <ParamField path="keyProvider" type="KeyProvider">
+      Encryption key provider (required for session persistence)
+    </ParamField>
+    <ParamField path="piiStorageProvider" type="PIIStorageProvider">
+      Storage provider (required for session persistence)
+    </ParamField>
+    <ParamField path="saveIntervalMs" type="number">
+      Interval for periodic PII map saves (milliseconds)
+    </ParamField>
+    <ParamField path="streamOptions" type="TransformOptions">
+      Node.js Transform stream options
+    </ParamField>
+    <ParamField path="onChunk" type="(event: StreamChunkEvent) => void">
+      Callback after each chunk is anonymized
+    </ParamField>
+    <ParamField path="onFinish" type="(event: StreamFinishEvent) => void">
+      Callback when the stream ends
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+### Returns
+
+`Promise<AnonymizerStream>` — a Node.js Transform stream.
+
+### Example
+
+```typescript
+import { createAnonymizerStream } from 'rehydra/streaming';
+
+const stream = await createAnonymizerStream({
+  anonymizer: { ner: { mode: 'quantized' } },
+  onChunk: (e) => console.log(`Processed: ${e.totalEntities} entities`),
+  onFinish: (e) => console.log(`Done: ${e.totalEntities} total`),
+});
+
+process.stdin.pipe(stream).pipe(process.stdout);
+```
+
+---
+
+## AnonymizerStream
+
+A Node.js `Transform` stream that anonymizes text passing through it.
+
+### Methods
+
+| Method | Returns | Description |
+|--------|---------|-------------|
+| `getPiiMap()` | `EncryptedPIIMap \| undefined` | Get the cumulative encrypted PII map |
+| `stats` | `object` | Get processing statistics |
+
+### Example
+
+```typescript
+const stream = await createAnonymizerStream({ ... });
+
+inputStream.pipe(stream).pipe(outputStream);
+
+stream.on('finish', () => {
+  const piiMap = stream.getPiiMap();
+  const stats = stream.stats;
+  console.log(`Entities: ${stats.totalEntities}, Time: ${stats.totalProcessingTimeMs}ms`);
+});
+```
+
+---
+
+## SentenceBuffer
+
+Accumulates text and flushes at sentence boundaries with overlap for NER context.
+
+### Constructor
+
+```typescript
+new SentenceBuffer(anonymizer: Anonymizer, config: ResolvedBufferConfig)
+```
+
+### Methods
+
+| Method | Returns | Description |
+|--------|---------|-------------|
+| `append(chunk: string)` | `FlushResult[]` | Append text, returns flushed results |
+| `flush()` | `FlushResult \| null` | Force flush remaining buffer |
+| `getCumulativePiiMap()` | `Map<string, string>` | Get all detected PII entries |
+| `getTotalEntities()` | `number` | Total detected entities |
+
+---
+
+## Types
+
+### StreamChunkEvent
+
+```typescript
+interface StreamChunkEvent {
+  anonymizedText: string;
+  entities: DetectedEntity[];
+  totalEntities: number;
+  processingTimeMs: number;
+}
+```
+
+### StreamFinishEvent
+
+```typescript
+interface StreamFinishEvent {
+  totalEntities: number;
+  piiMap?: EncryptedPIIMap;
+  totalProcessingTimeMs: number;
+}
+```
+
+### FlushResult
+
+```typescript
+interface FlushResult {
+  anonymizedText: string;
+  entities: DetectedEntity[];
+}
+```
+
+## Related
+
+- [Streaming Guide](/guides/streaming) - Usage guide and examples
+- [LLM Proxy](/guides/llm-proxy) - Proxy middleware with streaming support

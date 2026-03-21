@@ -1,0 +1,316 @@
+---
+title: "LLM Proxy"
+description: "Proxy middleware API reference for OpenAI and Anthropic"
+---
+
+Transparent PII anonymization and rehydration for LLM API calls. Available in Node.js and Bun only.
+
+## Import
+
+```typescript
+import {
+  wrapLLMClient,
+  createRehydraFetch,
+  createRehydraProxy,
+  createRehydraProxyServer,
+  SSEParser,
+  OpenAIProvider,
+  AnthropicProvider,
+  detectProvider,
+} from 'rehydra/proxy';
+```
+
+---
+
+## wrapLLMClient()
+
+Wraps an OpenAI or Anthropic SDK client for automatic anonymization/rehydration.
+
+### Signature
+
+```typescript
+function wrapLLMClient<T>(
+  client: T,
+  config: Omit<RehydraFetchConfig, 'provider'>
+): T
+```
+
+### Parameters
+
+<ParamField path="client" type="T" required>
+  An OpenAI or Anthropic SDK client instance
+</ParamField>
+
+<ParamField path="config" type="RehydraFetchConfig">
+  Configuration (see [RehydraFetchConfig](#rehydrafetchconfig))
+</ParamField>
+
+### Returns
+
+The same client type `T`, with fetch intercepted for anonymization.
+
+### Example
+
+```typescript
+import OpenAI from 'openai';
+import { wrapLLMClient } from 'rehydra/proxy';
+
+const client = wrapLLMClient(new OpenAI(), {
+  anonymizer: { ner: { mode: 'quantized' } },
+  keyProvider: new InMemoryKeyProvider(),
+  getSessionId: () => 'session-1',
+});
+```
+
+---
+
+## createRehydraFetch()
+
+Creates a drop-in `fetch` replacement that anonymizes requests and rehydrates responses.
+
+### Signature
+
+```typescript
+function createRehydraFetch(config: RehydraFetchConfig): typeof globalThis.fetch
+```
+
+### Parameters
+
+<ParamField path="config" type="RehydraFetchConfig" required>
+  Configuration (see [RehydraFetchConfig](#rehydrafetchconfig))
+</ParamField>
+
+### Returns
+
+A `fetch`-compatible function.
+
+### Example
+
+```typescript
+import { createRehydraFetch } from 'rehydra/proxy';
+
+const fetch = createRehydraFetch({
+  anonymizer: { ner: { mode: 'quantized' } },
+  keyProvider: new InMemoryKeyProvider(),
+  provider: 'openai',  // or 'anthropic', or auto-detected
+  getSessionId: () => 'session-1',
+});
+
+const response = await fetch('https://api.openai.com/v1/chat/completions', {
+  method: 'POST',
+  body: JSON.stringify({ model: 'gpt-4', messages: [...] }),
+});
+```
+
+---
+
+## createRehydraProxy()
+
+Creates an HTTP proxy middleware using the Web Request/Response API.
+
+### Signature
+
+```typescript
+function createRehydraProxy(
+  config: RehydraProxyConfig
+): (request: Request) => Promise<Response>
+```
+
+### Parameters
+
+<ParamField path="config" type="RehydraProxyConfig" required>
+  Configuration (see [RehydraProxyConfig](#rehydraproxyconfig))
+</ParamField>
+
+### Returns
+
+A function `(request: Request) => Promise<Response>` compatible with Bun.serve, Hono, and other frameworks using Web APIs.
+
+### Example
+
+```typescript
+import { createRehydraProxy } from 'rehydra/proxy';
+
+const proxy = createRehydraProxy({
+  upstream: 'https://api.openai.com',
+  anonymizer: { ner: { mode: 'quantized' } },
+  keyProvider: new InMemoryKeyProvider(),
+  getSessionId: () => 'session-1',
+});
+
+Bun.serve({ port: 8080, fetch: proxy });
+```
+
+---
+
+## createRehydraProxyServer()
+
+Creates and starts a standalone HTTP proxy server.
+
+### Signature
+
+```typescript
+function createRehydraProxyServer(
+  config: RehydraProxyServerConfig
+): Promise<RehydraProxyServer>
+```
+
+### Parameters
+
+<ParamField path="config" type="RehydraProxyServerConfig" required>
+  Extends [RehydraProxyConfig](#rehydraproxyconfig) with:
+
+  <Expandable title="Additional properties">
+    <ParamField path="port" type="number" default="8080">
+      Port to listen on
+    </ParamField>
+    <ParamField path="host" type="string" default="'localhost'">
+      Host to bind to
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+### Returns
+
+```typescript
+interface RehydraProxyServer {
+  server: http.Server;
+  port: number;
+  host: string;
+  close(): Promise<void>;
+}
+```
+
+### Example
+
+```typescript
+import { createRehydraProxyServer } from 'rehydra/proxy';
+
+const server = await createRehydraProxyServer({
+  upstream: 'https://api.openai.com',
+  port: 8080,
+  anonymizer: { ner: { mode: 'quantized' } },
+  keyProvider: new InMemoryKeyProvider(),
+  getSessionId: () => 'session-1',
+});
+
+// Point clients at http://localhost:8080/v1
+await server.close();
+```
+
+---
+
+## Configuration Types
+
+### RehydraFetchConfig
+
+```typescript
+interface RehydraFetchConfig {
+  // Anonymizer configuration
+  anonymizer?: AnonymizerConfig;
+
+  // Policy override
+  policy?: Partial<AnonymizationPolicy>;
+
+  // Encryption key provider
+  keyProvider?: KeyProvider;
+
+  // Storage for session persistence
+  piiStorageProvider?: PIIStorageProvider;
+
+  // Provider hint: 'openai' | 'anthropic' (auto-detected if omitted)
+  provider?: string;
+
+  // Derive session ID from request
+  getSessionId?: (request: Request) => string;
+
+  // Handle streaming responses (default: true)
+  handleStreaming?: boolean;
+
+  // Locale hint
+  locale?: string;
+}
+```
+
+### RehydraProxyConfig
+
+Extends `RehydraFetchConfig` with:
+
+```typescript
+interface RehydraProxyConfig extends RehydraFetchConfig {
+  // Upstream LLM API URL (e.g., 'https://api.openai.com')
+  upstream: string;
+
+  // Forward these headers from the original request (default: all)
+  forwardHeaders?: string[];
+
+  // Strip this prefix from the request path before forwarding
+  stripPrefix?: string;
+}
+```
+
+---
+
+## Providers
+
+### detectProvider()
+
+Auto-detect the LLM provider from request URL and headers.
+
+```typescript
+function detectProvider(
+  url: string,
+  headers: Headers,
+  hint?: string
+): LLMContentProvider
+```
+
+### LLMContentProvider Interface
+
+```typescript
+interface LLMContentProvider {
+  name: string;
+  matchesRequest(url: string, headers: Headers): boolean;
+  extractRequestText(body: object): string[];
+  rebuildRequestBody(body: object, anonymizedTexts: string[]): object;
+  extractResponseText(body: object): string[];
+  rebuildResponseBody(body: object, rehydratedTexts: string[]): object;
+  extractSSEDelta(data: object): string | null;
+  rebuildSSEDelta(data: object, rehydratedText: string): object;
+  isStreamingRequest(body: object): boolean;
+}
+```
+
+### Built-in Providers
+
+| Provider | Matches |
+|----------|---------|
+| `OpenAIProvider` | `api.openai.com` URL or `Bearer sk-` auth header |
+| `AnthropicProvider` | `api.anthropic.com` URL or `x-api-key`/`anthropic-version` headers |
+
+---
+
+## SSEParser
+
+Parser for Server-Sent Events streams.
+
+```typescript
+const parser = new SSEParser();
+
+// Parse SSE text
+const events = parser.parse(chunk);
+// [{ event: 'message', data: '...' }, ...]
+
+// Check for stream end
+import { isSSEDone } from 'rehydra/proxy';
+if (isSSEDone(event.data)) { /* stream complete */ }
+
+// Serialize back to SSE format
+import { serializeSSEEvent } from 'rehydra/proxy';
+const text = serializeSSEEvent({ event: 'message', data: '...' });
+```
+
+## Related
+
+- [LLM Proxy Guide](/guides/llm-proxy) - Usage guide and examples
+- [Streaming Guide](/guides/streaming) - Stream-level anonymization

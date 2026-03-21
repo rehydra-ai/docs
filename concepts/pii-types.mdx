@@ -18,6 +18,9 @@ These types have well-defined patterns and are detected using optimized regular 
 | `CREDIT_CARD` | Credit card numbers | `4111111111111111` | Luhn algorithm |
 | `IP_ADDRESS` | IPv4 and IPv6 addresses | `192.168.1.1` | Format validation |
 | `URL` | Web URLs | `https://example.com` | URI format |
+| `ACCOUNT_NUMBER` | Generic account numbers | `ACC-12345678` | Configurable pattern |
+| `TAX_ID` | Tax identification numbers | `DE123456789` | Configurable pattern |
+| `NATIONAL_ID` | National ID numbers | `SSN 123-45-6789` | Configurable pattern |
 | `CASE_ID` | Case/ticket numbers | `CASE-12345` | Configurable pattern |
 | `CUSTOMER_ID` | Customer identifiers | `CUST-ABC123` | Configurable pattern |
 
@@ -42,12 +45,22 @@ NER detection requires initializing with a model mode other than `'disabled'`. S
 When multiple detections overlap (e.g., an email that's also a URL), Rehydra uses priority ordering:
 
 ```
-Lower Priority                              Higher Priority
-──────────────────────────────────────────────────────────→
-URL → IP → LOCATION → ORG → PERSON → PHONE → EMAIL → IBAN → CREDIT_CARD
+Lower Priority                                                        Higher Priority
+────────────────────────────────────────────────────────────────────────────────────→
+URL → IP → LOCATION → ORG → PERSON → PHONE → EMAIL → IBAN → CREDIT_CARD → Custom IDs
 ```
 
-Higher priority types take precedence when spans overlap.
+Higher priority types take precedence when spans overlap. Custom ID patterns (CASE_ID, CUSTOMER_ID) take precedence over generic types.
+
+## Detection Sources
+
+Each detected entity has a `source` indicating how it was found:
+
+| Source | Description |
+|--------|-------------|
+| `REGEX` | Detected via regex pattern matching |
+| `NER` | Detected via NER model inference |
+| `HYBRID` | Detected by both regex and NER (overlapping spans merged) |
 
 ## Confidence Thresholds
 

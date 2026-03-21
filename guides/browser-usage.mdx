@@ -104,7 +104,7 @@ On first initialization, Rehydra downloads:
 | Data | Size | Storage |
 |------|------|---------|
 | NER Model (quantized) | ~280 MB | OPFS |
-| Semantic Data | ~12 MB | IndexedDB |
+| Semantic Data | ~4 MB | IndexedDB |
 
 Show download progress to users:
 
@@ -259,6 +259,8 @@ connect-src https://huggingface.co;  # For model downloads
 The browser build excludes:
 
 - `SQLitePIIStorageProvider` (use `IndexedDBPIIStorageProvider`)
+- Streaming anonymization (`rehydra/streaming`)
+- LLM proxy middleware (`rehydra/proxy`)
 - Node.js `fs`, `path`, `os` modules
 - Direct file system access
 

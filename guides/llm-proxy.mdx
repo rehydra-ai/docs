@@ -1,0 +1,225 @@
+---
+title: "LLM Proxy"
+description: "Automatic PII anonymization and rehydration for OpenAI and Anthropic API calls"
+---
+
+The LLM proxy middleware intercepts requests to LLM APIs, anonymizes PII in outgoing messages, and rehydrates PII in responses — all transparently.
+
+<Note>
+The proxy module is only available in Node.js and Bun. It is not included in the browser build.
+</Note>
+
+## Supported Providers
+
+| Provider | Detection | Streaming |
+|----------|-----------|-----------|
+| OpenAI (and compatible APIs) | URL, `Bearer sk-` header | SSE |
+| Anthropic | URL, `x-api-key`/`anthropic-version` headers | SSE |
+
+## Integration Methods
+
+From simplest to most flexible:
+
+| Method | Use Case |
+|--------|----------|
+| [`wrapLLMClient()`](#wrap-an-sdk-client) | Wrap an OpenAI or Anthropic SDK client |
+| [`createRehydraFetch()`](#custom-fetch) | Drop-in `fetch` replacement |
+| [`createRehydraProxy()`](#proxy-middleware) | HTTP middleware for any framework |
+| [`createRehydraProxyServer()`](#standalone-proxy-server) | Standalone proxy server |
+
+---
+
+## Wrap an SDK Client
+
+The simplest approach — wrap your existing OpenAI or Anthropic client:
+
+```typescript
+import OpenAI from 'openai';
+import { wrapLLMClient } from 'rehydra/proxy';
+import { InMemoryKeyProvider, SQLitePIIStorageProvider } from 'rehydra';
+
+const storage = new SQLitePIIStorageProvider('./pii.db');
+await storage.initialize();
+
+const client = new OpenAI();
+
+const wrappedClient = wrapLLMClient(client, {
+  anonymizer: { ner: { mode: 'quantized' } },
+  keyProvider: new InMemoryKeyProvider(),
+  piiStorageProvider: storage,
+  getSessionId: (req) => 'session-123',
+});
+
+// Use exactly as before — PII is anonymized/rehydrated automatically
+const response = await wrappedClient.chat.completions.create({
+  model: 'gpt-4',
+  messages: [{ role: 'user', content: 'My name is John Smith and my email is john@acme.com' }],
+});
+
+console.log(response.choices[0].message.content);
+// Response contains original PII values (rehydrated)
+```
+
+Works the same way with Anthropic:
+
+```typescript
+import Anthropic from '@anthropic-ai/sdk';
+import { wrapLLMClient } from 'rehydra/proxy';
+
+const client = new Anthropic();
+const wrappedClient = wrapLLMClient(client, {
+  anonymizer: { ner: { mode: 'quantized' } },
+  keyProvider: new InMemoryKeyProvider(),
+  piiStorageProvider: storage,
+  getSessionId: (req) => 'session-123',
+});
+```
+
+---
+
+## Custom Fetch
+
+Replace the `fetch` function used by any SDK:
+
+```typescript
+import { createRehydraFetch } from 'rehydra/proxy';
+import { InMemoryKeyProvider } from 'rehydra';
+
+const rehydraFetch = createRehydraFetch({
+  anonymizer: { ner: { mode: 'quantized' } },
+  keyProvider: new InMemoryKeyProvider(),
+  getSessionId: (req) => 'session-123',
+});
+
+// Use with OpenAI SDK
+const client = new OpenAI({ fetch: rehydraFetch });
+
+// Or use directly
+const response = await rehydraFetch('https://api.openai.com/v1/chat/completions', {
+  method: 'POST',
+  headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    model: 'gpt-4',
+    messages: [{ role: 'user', content: 'Contact john@example.com' }],
+  }),
+});
+```
+
+---
+
+## Proxy Middleware
+
+For framework integration (Hono, Bun.serve, etc.):
+
+```typescript
+import { createRehydraProxy } from 'rehydra/proxy';
+import { InMemoryKeyProvider } from 'rehydra';
+
+const proxy = createRehydraProxy({
+  upstream: 'https://api.openai.com',
+  anonymizer: { ner: { mode: 'quantized' } },
+  keyProvider: new InMemoryKeyProvider(),
+  getSessionId: (req) => 'session-123',
+});
+
+// Use with Bun.serve
+Bun.serve({
+  port: 8080,
+  fetch: proxy,
+});
+
+// Or with Hono
+import { Hono } from 'hono';
+const app = new Hono();
+app.all('/v1/*', (c) => proxy(c.req.raw));
+```
+
+Configure your LLM client to point at the proxy:
+
+```typescript
+const client = new OpenAI({
+  baseURL: 'http://localhost:8080/v1',
+});
+```
+
+---
+
+## Standalone Proxy Server
+
+Start a proxy server with one function call:
+
+```typescript
+import { createRehydraProxyServer } from 'rehydra/proxy';
+import { InMemoryKeyProvider } from 'rehydra';
+
+const server = await createRehydraProxyServer({
+  upstream: 'https://api.openai.com',
+  port: 8080,
+  anonymizer: { ner: { mode: 'quantized' } },
+  keyProvider: new InMemoryKeyProvider(),
+  getSessionId: (req) => 'session-123',
+});
+
+console.log(`Proxy running at http://${server.host}:${server.port}`);
+
+// Point any client at the proxy
+// const client = new OpenAI({ baseURL: 'http://localhost:8080/v1' });
+
+// Later: shut down
+await server.close();
+```
+
+---
+
+## Streaming Support
+
+All proxy methods support streaming (SSE) responses. PII is rehydrated in each streamed chunk:
+
+```typescript
+const wrappedClient = wrapLLMClient(client, {
+  anonymizer: { ner: { mode: 'quantized' } },
+  keyProvider: new InMemoryKeyProvider(),
+  piiStorageProvider: storage,
+  getSessionId: (req) => 'session-123',
+});
+
+// Streaming works transparently
+const stream = await wrappedClient.chat.completions.create({
+  model: 'gpt-4',
+  messages: [{ role: 'user', content: 'Tell me about John Smith' }],
+  stream: true,
+});
+
+for await (const chunk of stream) {
+  process.stdout.write(chunk.choices[0]?.delta?.content || '');
+  // PII values are rehydrated in each chunk
+}
+```
+
+## Session Management
+
+Use `getSessionId` to associate requests with sessions. This enables consistent entity IDs and cross-request rehydration:
+
+```typescript
+const wrappedClient = wrapLLMClient(client, {
+  anonymizer: { ner: { mode: 'quantized' } },
+  keyProvider: new InMemoryKeyProvider(),
+  piiStorageProvider: storage,
+  getSessionId: (req) => {
+    // Extract session from custom header, URL, or other context
+    const url = new URL(req.url);
+    return url.searchParams.get('session') || 'default';
+  },
+});
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Streaming" icon="wave-pulse" href="/guides/streaming">
+    Stream-level anonymization for chunked text
+  </Card>
+  <Card title="Proxy API Reference" icon="book" href="/api-reference/proxy">
+    Complete proxy API documentation
+  </Card>
+</CardGroup>

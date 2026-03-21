@@ -15,6 +15,12 @@ function createAnonymizer(config?: AnonymizerConfig): Anonymizer
 
 ### config (optional)
 
+<ParamField path="mode" type="string" default="'pseudonymize'">
+  Anonymization mode:
+  - `'pseudonymize'` — Reversible. Returns an encrypted `piiMap` for later rehydration.
+  - `'anonymize'` — Irreversible. No `piiMap` is returned; PII is permanently removed.
+</ParamField>
+
 <ParamField path="ner" type="NERConfig">
   NER model configuration
   
@@ -39,6 +45,15 @@ function createAnonymizer(config?: AnonymizerConfig): Anonymizer
     </ParamField>
     <ParamField path="onDownloadProgress" type="DownloadProgressCallback">
       Download progress callback
+    </ParamField>
+    <ParamField path="backend" type="string" default="'local'">
+      Inference backend: `'local'` (ONNX on device) or `'inference-server'` (remote GPU server)
+    </ParamField>
+    <ParamField path="inferenceServerUrl" type="string">
+      URL of the inference server (required when backend is `'inference-server'`)
+    </ParamField>
+    <ParamField path="inferenceServerTimeout" type="number" default="30000">
+      Inference server request timeout in milliseconds
     </ParamField>
   </Expandable>
 </ParamField>
@@ -162,6 +177,34 @@ await anonymizer.initialize();
 // Use sessions for automatic persistence
 const session = anonymizer.session('chat-123');
 await session.anonymize('Hello John!');
+```
+
+### Irreversible Anonymization
+
+```typescript
+const anonymizer = createAnonymizer({
+  mode: 'anonymize',  // No piiMap returned, PII permanently removed
+  ner: { mode: 'quantized' },
+});
+
+await anonymizer.initialize();
+
+const result = await anonymizer.anonymize('Contact John Smith at john@acme.com');
+console.log(result.anonymizedText);
+// "Contact <PII type="PERSON" id="1"/> at <PII type="EMAIL" id="1"/>"
+console.log(result.piiMap);  // undefined
+```
+
+### With Inference Server
+
+```typescript
+const anonymizer = createAnonymizer({
+  ner: {
+    mode: 'quantized',
+    backend: 'inference-server',
+    inferenceServerUrl: 'http://gpu-server:8000/predict',
+  }
+});
 ```
 
 ### With Custom Thresholds

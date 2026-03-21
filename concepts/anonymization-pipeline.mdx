@@ -155,6 +155,27 @@ Secures the PII map using AES-256-GCM:
 }
 ```
 
+## Anonymization Modes
+
+Rehydra supports two anonymization modes:
+
+| Mode | Behavior | `piiMap` Returned |
+|------|----------|-------------------|
+| `'pseudonymize'` (default) | Reversible — PII is replaced with tags and an encrypted map is returned for later rehydration | Yes |
+| `'anonymize'` | Irreversible — PII is replaced with tags but no map is returned, original values are discarded | No |
+
+```typescript
+// Pseudonymize (default): reversible
+const anonymizer = createAnonymizer({ mode: 'pseudonymize' });
+const result = await anonymizer.anonymize(text);
+result.piiMap;  // EncryptedPIIMap — can rehydrate later
+
+// Anonymize: irreversible
+const anonymizer = createAnonymizer({ mode: 'anonymize' });
+const result = await anonymizer.anonymize(text);
+result.piiMap;  // undefined — cannot rehydrate
+```
+
 ## Performance Characteristics
 
 | Stage | Time (2K chars) | Notes |

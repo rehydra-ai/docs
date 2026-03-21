@@ -30,6 +30,17 @@ This section provides detailed documentation for all Rehydra exports.
   </Card>
 </CardGroup>
 
+## Streaming & Proxy
+
+<CardGroup cols={2}>
+  <Card title="Streaming" icon="wave-pulse" href="/api-reference/streaming">
+    Stream-based anonymization for chunked text (Node.js/Bun)
+  </Card>
+  <Card title="LLM Proxy" icon="server" href="/api-reference/proxy">
+    Proxy middleware for OpenAI and Anthropic (Node.js/Bun)
+  </Card>
+</CardGroup>
+
 ## Utilities
 
 <CardGroup cols={2}>
@@ -67,12 +78,18 @@ import {
   InMemoryPIIStorageProvider,
   SQLitePIIStorageProvider,      // Node.js only
   IndexedDBPIIStorageProvider,   // Browser only
-  
+
   // Types
   PIIType,
   type AnonymizationResult,
   type AnonymizationPolicy,
 } from 'rehydra';
+
+// Streaming (Node.js/Bun only)
+import { createAnonymizerStream } from 'rehydra/streaming';
+
+// LLM Proxy (Node.js/Bun only)
+import { wrapLLMClient, createRehydraFetch, createRehydraProxy } from 'rehydra/proxy';
 ```
 
 ### Result Structure
@@ -89,11 +106,12 @@ interface AnonymizationResult {
     start: number;
     end: number;
     confidence: number;
-    source: 'REGEX' | 'NER';
+    source: 'REGEX' | 'NER' | 'HYBRID';
+    semantic?: { gender?: string; scope?: string; title?: string };
   }>;
-  
-  // Encrypted PII map
-  piiMap: {
+
+  // Encrypted PII map (undefined in 'anonymize' mode)
+  piiMap?: {
     ciphertext: string;
     iv: string;
     authTag: string;
@@ -114,6 +132,11 @@ interface AnonymizationResult {
 
 ```typescript
 interface AnonymizerConfig {
+  // Anonymization mode
+  mode?: 'pseudonymize' | 'anonymize';  // default: 'pseudonymize'
+  // 'pseudonymize': reversible — returns encrypted piiMap for rehydration
+  // 'anonymize': irreversible — no piiMap returned, PII is permanently removed
+
   // NER model configuration
   ner?: {
     mode: 'disabled' | 'quantized' | 'standard' | 'custom';
@@ -123,8 +146,12 @@ interface AnonymizerConfig {
     thresholds?: Partial<Record<PIIType, number>>;
     onStatus?: (status: string) => void;
     onDownloadProgress?: (progress: DownloadProgress) => void;
+    // Inference backend
+    backend?: 'local' | 'inference-server';  // default: 'local'
+    inferenceServerUrl?: string;   // required if backend='inference-server'
+    inferenceServerTimeout?: number;  // default: 30000
   };
-  
+
   // Semantic enrichment
   semantic?: {
     enabled: boolean;
@@ -132,13 +159,13 @@ interface AnonymizerConfig {
     onStatus?: (status: string) => void;
     onDownloadProgress?: (progress: DownloadProgress) => void;
   };
-  
+
   // Encryption key provider
   keyProvider?: KeyProvider;
-  
+
   // Storage for sessions
   piiStorageProvider?: PIIStorageProvider;
-  
+
   // Default anonymization policy
   defaultPolicy?: AnonymizationPolicy;
 }
@@ -159,9 +186,15 @@ interface AnonymizationPolicy {
   // Type priority for overlaps
   typePriority: PIIType[];
   
-  // Allowlist (never anonymize)
+  // Custom ID patterns
+  customIdPatterns: CustomIdPattern[];
+
+  // Allowlist (never anonymize these terms)
   allowlistTerms: Set<string>;
-  
+
+  // Denylist (always anonymize matches)
+  denylistPatterns: RegExp[];
+
   // ID reuse for repeated values
   reuseIdsForRepeatedPII: boolean;
   

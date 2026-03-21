@@ -44,11 +44,14 @@ interface AnonymizationResult {
     start: number;
     end: number;
     confidence: number;
-    source: 'REGEX' | 'NER';
-    gender?: 'male' | 'female' | 'neutral';
-    scope?: 'city' | 'country' | 'region';
+    source: 'REGEX' | 'NER' | 'HYBRID';
+    semantic?: {
+      gender?: 'male' | 'female' | 'neutral' | 'unknown';
+      scope?: 'city' | 'country' | 'region' | 'unknown';
+      title?: string;
+    };
   }>;
-  piiMap: {
+  piiMap?: {   // undefined when mode is 'anonymize'
     ciphertext: string;
     iv: string;
     authTag: string;

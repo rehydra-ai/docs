@@ -124,6 +124,23 @@ await clearModelCache('quantized');
 await clearModelCache();
 ```
 
+## Inference Server Backend
+
+For batch processing or GPU acceleration, offload NER inference to a remote server:
+
+```typescript
+const anonymizer = createAnonymizer({
+  ner: {
+    mode: 'quantized',
+    backend: 'inference-server',
+    inferenceServerUrl: 'http://localhost:8000/predict',
+    inferenceServerTimeout: 30000,  // 30 seconds (default)
+  }
+});
+```
+
+This sends tokenized text to the server for inference instead of running ONNX locally. The server must accept the same input format and return logits in the expected shape.
+
 ## Custom Models
 
 Use your own ONNX model:

@@ -91,6 +91,12 @@ import { createAnonymizer, SQLitePIIStorageProvider } from 'rehydra/node';
 
 // SQLite storage only (Node.js only)
 import { SQLitePIIStorageProvider } from 'rehydra/storage/sqlite';
+
+// Streaming anonymization (Node.js/Bun only)
+import { createAnonymizerStream } from 'rehydra/streaming';
+
+// LLM proxy middleware (Node.js/Bun only)
+import { wrapLLMClient, createRehydraProxy } from 'rehydra/proxy';
 ```
 
 ## What's Included
