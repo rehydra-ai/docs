@@ -33,6 +33,30 @@ Common examples include:
 - `PERSON`
 - `ORG`
 - `LOCATION`
+- `ADDRESS`
+- `DATE_OF_BIRTH`
+
+### Secrets
+
+Secrets are credentials and keys that should never leave your local environment. Detection is **opt-in** via the `secrets` configuration.
+
+Supported types:
+
+- `API_KEY` — provider-specific keys (OpenAI, Anthropic, GitHub, Stripe, Slack, and others)
+- `PRIVATE_KEY` — PEM-encoded private keys (RSA, EC, DSA, OpenSSH, PGP)
+- `JWT` — JSON Web Tokens
+- `CONNECTION_STRING` — database/service URIs with embedded credentials (PostgreSQL, MySQL, MongoDB, Redis, AMQP)
+- `AWS_CREDENTIALS` — AWS access key IDs and secret access keys
+- `ENV_VAR_SECRET` — secret values in `.env`-style `KEY=VALUE` lines
+- `CONFIG_SECRET` — secret values in JSON, YAML, or TOML config files
+
+```typescript
+import { createAnonymizer } from 'rehydra';
+
+const anonymizer = createAnonymizer({
+  secrets: { enabled: true },
+});
+```
 
 ### Domain-Specific Identifiers
 
@@ -53,7 +77,8 @@ These are usually added through custom recognizers or policy-level custom patter
 | Source | Best for | Examples |
 |--------|----------|----------|
 | Built-in regex recognizers | Stable, well-formed formats | Email, phone, IBAN, credit card |
-| Optional NER model | Meaning-dependent entities | Person, organization, location |
+| Optional NER model | Meaning-dependent entities | Person, organization, location, address |
+| Secrets recognizers (opt-in) | Credentials and keys | API keys, JWTs, connection strings, private keys |
 | Custom recognizers | Business-specific identifiers | Case IDs, customer IDs, proprietary formats |
 
 ## Type Selection and Policy
@@ -86,9 +111,12 @@ Types appear in the placeholder output and in entity metadata:
 
 ## Next Steps
 
-<CardGroup cols={2}>
+<CardGroup cols={3}>
   <Card title="Recognizers" icon="scan-search" href="/concepts/recognizers">
     See how Rehydra finds structured, contextual, and custom PII.
+  </Card>
+  <Card title="Secrets Detection" icon="key" href="/guides/secrets-detection">
+    Enable detection for API keys, tokens, and credentials.
   </Card>
   <Card title="Custom Recognizers" icon="code" href="/guides/custom-recognizers">
     Add your own domain-specific patterns.

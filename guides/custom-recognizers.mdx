@@ -117,6 +117,22 @@ Rehydra includes these recognizers by default:
 | `ipAddressRecognizer` | IP_ADDRESS | 192.168.1.1, ::1 |
 | `urlRecognizer` | URL | https://example.com |
 
+### Secrets Recognizers (opt-in)
+
+These are registered automatically when `secrets: { enabled: true }` is set:
+
+| Recognizer | PII Type | Pattern Examples |
+|------------|----------|------------------|
+| `apiKeyRecognizer` | API_KEY | `sk-proj-...`, `sk-ant-...`, `ghp_...` |
+| `privateKeyRecognizer` | PRIVATE_KEY | `-----BEGIN RSA PRIVATE KEY-----` |
+| `jwtRecognizer` | JWT | `eyJhbGciOiJIUzI1NiJ9...` |
+| `connectionStringRecognizer` | CONNECTION_STRING | `postgres://user:pass@host/db` |
+| `awsCredentialsRecognizer` | AWS_CREDENTIALS | `AKIA...` |
+| `envVarSecretRecognizer` | ENV_VAR_SECRET | `API_KEY=sk-abc123` |
+| `configSecretRecognizer` | CONFIG_SECRET | `"database_password": "s3cret"` |
+
+See the [Secrets Detection guide](/guides/secrets-detection) for full configuration options.
+
 ## Recognizer Registry
 
 Manage recognizers through the registry:

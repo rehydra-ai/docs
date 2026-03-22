@@ -5,7 +5,7 @@ description: "How Rehydra detects sensitive values across built-in, NER, and cus
 
 Recognizers are the detection building blocks in Rehydra. They decide which spans count as sensitive before placeholders are generated.
 
-## Three Recognizer Sources
+## Four Recognizer Sources
 
 ### Built-in Regex Recognizers
 
@@ -20,8 +20,16 @@ The optional NER model handles contextual entities that are hard to capture with
 - `PERSON`
 - `ORG`
 - `LOCATION`
+- `ADDRESS`
+- `DATE_OF_BIRTH`
 
 This layer is useful when privacy depends on names and other meaning-dependent entities, not just formatted identifiers.
+
+### Secrets Recognizers
+
+The opt-in secrets recognizers detect credentials and keys such as API keys, private keys, JWTs, database connection strings, AWS credentials, and secrets embedded in `.env` files or config files.
+
+They are enabled by setting `secrets: { enabled: true }` in `createAnonymizer()`.
 
 ### Custom Recognizers
 
@@ -35,6 +43,7 @@ Rehydra can combine multiple sources in one pass:
 
 - Regex recognizers detect structured values
 - NER detects contextual values if enabled
+- Secrets recognizers detect credentials and keys if enabled
 - Custom recognizers add product- or company-specific coverage
 - Overlapping matches are resolved by policy rules
 
@@ -60,6 +69,12 @@ Use NER when:
 - You need names, organizations, or locations
 - Context matters more than fixed format
 
+Use secrets recognizers when:
+
+- Your text may contain API keys, tokens, or database credentials
+- You process `.env` files or config files with embedded secrets
+- You want to prevent credential leaks to LLMs or external services
+
 Use custom recognizers when:
 
 - You need to protect internal identifiers
@@ -68,9 +83,12 @@ Use custom recognizers when:
 
 ## Next Steps
 
-<CardGroup cols={2}>
+<CardGroup cols={3}>
   <Card title="PII Types" icon="shield" href="/concepts/pii-types">
     See the categories recognizers map into.
+  </Card>
+  <Card title="Secrets Detection" icon="key" href="/guides/secrets-detection">
+    Enable detection for credentials and keys.
   </Card>
   <Card title="Custom Recognizers" icon="code" href="/guides/custom-recognizers">
     Implement your own recognizers and registry setup.

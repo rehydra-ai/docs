@@ -38,6 +38,7 @@
               "guides/cli",
               "guides/opencode-plugin",
               "guides/ner-detection",
+              "guides/secrets-detection",
               "guides/semantic-enrichment",
               "guides/sessions-storage",
               "guides/streaming",
