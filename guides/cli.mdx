@@ -9,15 +9,35 @@ The Rehydra CLI lets you anonymize files and piped text directly from the termin
 
 The CLI is published as a separate lightweight package:
 
-```bash
+<CodeGroup>
+```bash npm
 npm install -g @rehydra/cli
 ```
 
-Or run directly with npx:
+```bash bun
+bun add -g @rehydra/cli
+```
 
-```bash
+```bash pnpm
+pnpm add -g @rehydra/cli
+```
+</CodeGroup>
+
+Or run directly without installing globally:
+
+<CodeGroup>
+```bash npm
 npx @rehydra/cli anonymize input.txt
 ```
+
+```bash bun
+bunx @rehydra/cli anonymize input.txt
+```
+
+```bash pnpm
+pnpm dlx @rehydra/cli anonymize input.txt
+```
+</CodeGroup>
 
 <Note>
 The CLI requires Node.js 18+ and depends on the `rehydra` SDK package (installed automatically).
