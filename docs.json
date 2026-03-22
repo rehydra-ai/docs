@@ -8,6 +8,10 @@
     "dark": "#0284C7"
   },
   "favicon": "/favicon.ico",
+  "contextual": {
+    "options": ["copy", "view", "claude", "chatgpt"],
+    "display": "header"
+  },
   "navigation": {
     "tabs": [
       {

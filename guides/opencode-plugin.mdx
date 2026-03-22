@@ -1,9 +1,9 @@
 ---
 title: "OpenCode Plugin"
-description: "Prevent your coding agent from leaking secrets to LLM providers"
+description: "Prevent your coding agent from leaking PII and secrets to LLM providers"
 ---
 
-The Rehydra OpenCode plugin intercepts the conversation between [OpenCode](https://github.com/sst/opencode) and the LLM. Secrets from your `.env` files are replaced with placeholders before they leave your machine, and transparently restored before any tool executes locally.
+The Rehydra OpenCode plugin intercepts the conversation between [OpenCode](https://github.com/sst/opencode) and the LLM. It automatically detects PII and secrets in all messages, replaces them with placeholders before they leave your machine, and transparently restores real values before any tool executes locally.
 
 ## Installation
 
@@ -29,7 +29,7 @@ Add the plugin to your `opencode.json`:
 }
 ```
 
-By default, the plugin reads `.env` in your project root. Secrets with values of 8+ characters are detected and scrubbed.
+The plugin automatically detects PII (emails, phone numbers, credit cards, etc.) and secrets (API keys, JWTs, connection strings, etc.) in all messages. It also reads `.env` in your project root to catch exact secret values wherever they appear.
 
 <Note>
 Requires Node.js 18+ and depends on the `rehydra` SDK package (installed automatically).
@@ -67,11 +67,26 @@ export default createRehydraPlugin({
 
 ## What Gets Detected
 
-- Environment variable values from `.env` files
-- API keys, tokens, and credentials (pattern-based)
+The plugin uses Rehydra's full detection suite automatically — no configuration needed.
+
+**Structured PII** — detected via pattern matching:
+- Emails, phone numbers, credit card numbers
+- IBANs, BIC/SWIFT codes, account numbers
+- IP addresses, URLs
+- Tax IDs, national IDs
+
+**Secrets** — detected via provider-specific patterns:
+- API keys (OpenAI, Anthropic, GitHub, Stripe, Slack, and others)
+- JWTs, private keys (PEM), connection strings
 - AWS access keys and secret keys
-- JWTs, private keys, connection strings
-- Any values passed via `redactValues`
+- Secret values in `.env` files and JSON/YAML/TOML configs
+
+**Soft PII** (optional, via NER model — not recommended due to significant added latency):
+- Names, organizations, locations, addresses
+
+**Additional sources:**
+- Exact values from `.env` files (matched anywhere in text)
+- Explicit values passed via `redactValues`
 
 ## How It Works
 
@@ -79,7 +94,7 @@ The plugin uses five OpenCode hooks — everything runs locally and no data leav
 
 | Hook | What it does |
 |------|-------------|
-| `messages.transform` | Scrubs secrets from all message text and tool outputs before they reach the LLM |
+| `messages.transform` | Scrubs PII and secrets from all message text and tool outputs before they reach the LLM |
 | `system.transform` | Injects an instruction telling the LLM to treat placeholders as real values |
 | `tool.execute.before` | Restores real values in tool arguments before local execution |
 | `tool.execute.after` | Restores real values in displayed tool output |

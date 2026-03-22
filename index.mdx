@@ -13,7 +13,7 @@ Rehydra is a privacy layer for working with sensitive text and secrets. It helps
     Anonymize, inspect, and rehydrate text directly from the terminal.
   </Card>
   <Card title="OpenCode Plugin" icon="shield" href="/guides/opencode-plugin">
-    Prevent coding agents from leaking secrets from `.env` files.
+    Prevent coding agents from leaking PII and secrets to LLMs.
   </Card>
 </CardGroup>
 
@@ -39,10 +39,10 @@ Use `@rehydra/cli` when you want to work with files or piped text without writin
 
 ### OpenCode Plugin
 
-Use `@rehydra/opencode` when you want OpenCode to scrub secrets before they are sent to an LLM.
+Use `@rehydra/opencode` when you want OpenCode to automatically scrub PII and secrets before they are sent to an LLM.
 
-- Scan `.env` values locally
-- Replace detected secrets with placeholders in prompts and tool inputs
+- Auto-detect PII (emails, phones, credit cards) and secrets (API keys, JWTs, connection strings) in all messages
+- Optionally scan `.env` files to catch exact secret values anywhere in text
 - Restore original values before local tool execution
 - Add privacy protection to agent workflows with minimal setup
 
@@ -90,6 +90,6 @@ Use `@rehydra/opencode` when you want OpenCode to scrub secrets before they are 
     Learn the terminal workflow and available commands.
   </Card>
   <Card title="OpenCode Plugin Guide" icon="shield" href="/guides/opencode-plugin">
-    Set up automatic secret scrubbing for OpenCode.
+    Set up automatic PII and secret scrubbing for OpenCode.
   </Card>
 </CardGroup>
