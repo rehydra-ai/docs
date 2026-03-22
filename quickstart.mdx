@@ -1,9 +1,27 @@
 ---
 title: "Quick Start"
-description: "Get up and running with Rehydra in under 5 minutes"
+description: "Choose the right Rehydra product for your workflow"
 ---
 
-## Installation
+Rehydra ships as three product surfaces: the SDK for application code, the CLI for terminal workflows, and the OpenCode plugin for agent privacy. Start with the one that matches how you work.
+
+## Choose Your Starting Point
+
+<CardGroup cols={3}>
+  <Card title="SDK" icon="code" href="/installation">
+    Add Rehydra to your app and control anonymization in code.
+  </Card>
+  <Card title="CLI Tool" icon="terminal" href="/guides/cli">
+    Protect files and piped text from the terminal.
+  </Card>
+  <Card title="OpenCode Plugin" icon="shield" href="/guides/opencode-plugin">
+    Scrub secrets before OpenCode sends them to an LLM.
+  </Card>
+</CardGroup>
+
+## SDK
+
+Use the SDK when you are building a product or integrating privacy into an existing system.
 
 <CodeGroup>
 ```bash npm
@@ -19,158 +37,111 @@ pnpm add rehydra
 ```
 </CodeGroup>
 
-## Basic Usage
-
-### Regex-Only Mode (No Downloads Required)
-
-For structured PII like emails, phones, IBANs, and credit cards:
-
 ```typescript
 import { anonymizeRegexOnly } from 'rehydra';
 
-const result = await anonymizeRegexOnly(
-  'Contact john@example.com or call +49 30 123456. IBAN: DE89370400440532013000'
-);
+const result = await anonymizeRegexOnly('Contact john@example.com');
 
 console.log(result.anonymizedText);
-// "Contact <PII type="EMAIL" id="1"/> or call <PII type="PHONE" id="2"/>. IBAN: <PII type="IBAN" id="3"/>"
+// "Contact <PII type=\"EMAIL\" id=\"1\"/>"
 ```
 
-### Full Mode with NER
+Best for:
 
-For detecting names, organizations, and locations, enable the NER model:
+- Server-side apps and backend services
+- Browser-based privacy workflows
+- Agent, proxy, or streaming integrations
+- Teams that need fine-grained control over detection and rehydration
 
-```typescript
-import { createAnonymizer } from 'rehydra';
+## CLI Tool
 
-const anonymizer = createAnonymizer({
-  ner: { 
-    mode: 'quantized',  // ~280 MB, auto-downloaded on first use
-    onStatus: (status) => console.log(status),
-  }
-});
+Use the CLI when you want to protect text quickly without writing application code.
 
-await anonymizer.initialize();
-
-const result = await anonymizer.anonymize(
-  'Hello John Smith from Acme Corp in Berlin!'
-);
-
-console.log(result.anonymizedText);
-// "Hello <PII type="PERSON" id="1"/> from <PII type="ORG" id="2"/> in <PII type="LOCATION" id="3"/>!"
-
-// Clean up when done
-await anonymizer.dispose();
+<CodeGroup>
+```bash npm
+npm install -g @rehydra/cli
 ```
 
-## Complete Translation Workflow
-
-Here's the full workflow for privacy-preserving translation:
-
-```typescript
-import { 
-  createAnonymizer, 
-  decryptPIIMap, 
-  rehydrate,
-  InMemoryKeyProvider 
-} from 'rehydra';
-
-// 1. Create a key provider (required to decrypt later)
-const keyProvider = new InMemoryKeyProvider();
-
-// 2. Create anonymizer with key provider
-const anonymizer = createAnonymizer({
-  ner: { mode: 'quantized' },
-  keyProvider
-});
-
-await anonymizer.initialize();
-
-// 3. Anonymize before translation
-const original = 'Hello John Smith from Acme Corp in Berlin!';
-const result = await anonymizer.anonymize(original);
-
-console.log(result.anonymizedText);
-// "Hello <PII type="PERSON" id="1"/> from <PII type="ORG" id="2"/> in <PII type="LOCATION" id="3"/>!"
-
-// 4. Translate (placeholders are preserved by most translation APIs)
-const translated = await yourTranslateAPI(result.anonymizedText);
-// "Hallo <PII type="PERSON" id="1"/> von <PII type="ORG" id="2"/> in <PII type="LOCATION" id="3"/>!"
-
-// 5. Decrypt the PII map using the same key
-const encryptionKey = await keyProvider.getKey();
-const piiMap = await decryptPIIMap(result.piiMap, encryptionKey);
-
-// 6. Rehydrate - replace placeholders with original values
-const rehydrated = rehydrate(translated, piiMap);
-
-console.log(rehydrated);
-// "Hallo John Smith von Acme Corp in Berlin!"
-
-// 7. Clean up
-await anonymizer.dispose();
+```bash bun
+bun add -g @rehydra/cli
 ```
 
-<Tip>
-**Key Points:**
-- **Save the encryption key** — You need the same key to decrypt the PII map
-- **Placeholders are XML-like** — Most translation services preserve them automatically
-- **PII stays local** — Original values never leave your system during translation
-</Tip>
+```bash pnpm
+pnpm add -g @rehydra/cli
+```
+</CodeGroup>
 
-## Semantic Enrichment
-
-Add gender and location attributes for better machine translation:
-
-```typescript
-const anonymizer = createAnonymizer({
-  ner: { mode: 'quantized' },
-  semantic: { 
-    enabled: true,  // Downloads ~4 MB of semantic data on first use
-  }
-});
-
-await anonymizer.initialize();
-
-const result = await anonymizer.anonymize('Hello Maria Schmidt from Berlin!');
-
-console.log(result.anonymizedText);
-// "Hello <PII type="PERSON" gender="female" id="1"/> from <PII type="LOCATION" scope="city" id="2"/>!"
+```bash
+rehydra anonymize input.txt -o output.txt
 ```
 
-## Understanding the Result
+Best for:
 
-Every anonymization returns a structured result:
+- Local document processing
+- Shell scripts and automation
+- Inspecting sensitive text before sharing it
+- Teams that want a no-code entry point
 
-```typescript
-const result = await anonymizer.anonymize('Contact john@example.com');
+## OpenCode Plugin
 
-// The anonymized text with placeholder tags
-result.anonymizedText;  // "Contact <PII type="EMAIL" id="1"/>"
+Use the OpenCode plugin when your coding agent should never send raw secrets to an LLM provider.
 
-// Detected entities (without original values for safety)
-result.entities;        // [{ type: 'EMAIL', id: 1, start: 8, end: 24, ... }]
-
-// Encrypted PII map (for later rehydration)
-result.piiMap;          // { ciphertext: '...', iv: '...', authTag: '...' }
-
-// Processing statistics
-result.stats;           // { totalEntities: 1, processingTimeMs: 5, ... }
+<CodeGroup>
+```bash npm
+npm install @rehydra/opencode
 ```
+
+```bash bun
+bun add @rehydra/opencode
+```
+
+```bash pnpm
+pnpm add @rehydra/opencode
+```
+</CodeGroup>
+
+```json
+{
+  "plugin": ["@rehydra/opencode"]
+}
+```
+
+Best for:
+
+- OpenCode-based agent workflows
+- Repositories with sensitive `.env` files
+- Local development environments using AI assistants
+- Teams adding privacy guardrails to coding agents
+
+## Shared Model
+
+All three product surfaces follow the same core pattern:
+
+<Steps>
+  <Step title="Detect">
+    Sensitive values are identified locally.
+  </Step>
+  <Step title="Protect">
+    Originals are replaced with safe placeholders.
+  </Step>
+  <Step title="Restore">
+    Original values can be rehydrated locally when needed.
+  </Step>
+</Steps>
 
 ## Next Steps
 
 <CardGroup cols={2}>
-  <Card title="Installation Guide" icon="download" href="/installation">
-    Detailed setup for Node.js, browsers, and bundlers
+  <Card title="Installation" icon="download" href="/installation">
+    View environment-specific install details for the SDK.
   </Card>
-  <Card title="PII Types" icon="shield" href="/concepts/pii-types">
-    See all supported PII types
+  <Card title="CLI Guide" icon="terminal" href="/guides/cli">
+    Explore commands, options, and examples.
   </Card>
-  <Card title="NER Detection" icon="brain" href="/guides/ner-detection">
-    Configure the NER model for soft PII
+  <Card title="OpenCode Plugin Guide" icon="shield" href="/guides/opencode-plugin">
+    Configure secret scrubbing for OpenCode.
   </Card>
-  <Card title="Sessions & Storage" icon="database" href="/guides/sessions-storage">
-    Persist PII maps for multi-turn conversations
+  <Card title="API Reference" icon="book" href="/api-reference/introduction">
+    Dive into the SDK APIs and advanced features.
   </Card>
 </CardGroup>

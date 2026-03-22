@@ -1,118 +1,95 @@
 ---
 title: "Introduction"
-description: "On-device PII anonymization for high-privacy AI workflows"
+description: "Privacy tools for protecting sensitive data in code, terminals, and AI workflows"
 ---
 
-Rehydra is an on-device PII (Personally Identifiable Information) anonymization module designed for high-privacy AI workflows. It detects and replaces sensitive information with placeholder tags while maintaining an encrypted mapping for later rehydration.
+Rehydra is a privacy layer for working with sensitive text and secrets. It helps you detect protected values locally, replace them with safe placeholders, and restore them when you need the originals again.
 
-<Card
-  title="Quick Start"
-  icon="rocket"
-  href="/quickstart"
-  horizontal
->
-  Get up and running in under 5 minutes
-</Card>
-
-## Why Rehydra?
-
-When processing text through AI services (translation, summarization, etc.), you often need to protect sensitive information. Rehydra enables privacy-preserving workflows:
-
-<Steps>
-  <Step title="Anonymize">
-    Detect and replace PII with placeholder tags before sending to AI
-  </Step>
-  <Step title="Process">
-    Send anonymized text to any AI service safely
-  </Step>
-  <Step title="Rehydrate">
-    Restore original values after processing
-  </Step>
-</Steps>
-
-## Key Features
-
-<CardGroup cols={2}>
-  <Card title="Structured PII Detection" icon="code">
-    Regex-based detection for emails, phones, IBANs, credit cards, IPs, URLs, and more
+<CardGroup cols={3}>
+  <Card title="SDK" icon="code" href="/quickstart">
+    Build privacy-preserving applications in Node.js, Bun, or the browser.
   </Card>
-  <Card title="Soft PII Detection" icon="brain">
-    ONNX-powered NER model for names, organizations, and locations
+  <Card title="CLI Tool" icon="terminal" href="/guides/cli">
+    Anonymize, inspect, and rehydrate text directly from the terminal.
   </Card>
-  <Card title="Semantic Enrichment" icon="tags">
-    AI/MT-friendly tags with gender and location attributes for better translations
-  </Card>
-  <Card title="Secure Encryption" icon="lock">
-    AES-256-GCM encrypted storage of original PII values
-  </Card>
-  <Card title="Cross-Platform" icon="browser">
-    Works identically in Node.js, Bun, and browsers
-  </Card>
-  <Card title="Session Management" icon="database">
-    Persistent storage providers for multi-turn conversations
-  </Card>
-  <Card title="LLM Proxy" icon="server">
-    Drop-in proxy middleware for OpenAI and Anthropic with automatic PII handling
-  </Card>
-  <Card title="Streaming" icon="wave-pulse">
-    Stream-based anonymization for real-time LLM output and chunked text
-  </Card>
-  <Card title="CLI Tool" icon="terminal">
-    Anonymize, rehydrate, and inspect PII directly from the terminal
+  <Card title="OpenCode Plugin" icon="shield" href="/guides/opencode-plugin">
+    Prevent coding agents from leaking secrets from `.env` files.
   </Card>
 </CardGroup>
 
-## Example Workflow
+## Three Ways to Use Rehydra
 
-Here's how Rehydra protects PII during translation:
+### SDK
 
-```typescript
-import { createAnonymizer, decryptPIIMap, rehydrate, InMemoryKeyProvider } from 'rehydra';
+Use the `rehydra` package when you want privacy controls inside your application.
 
-// Setup
-const keyProvider = new InMemoryKeyProvider();
-const anonymizer = createAnonymizer({
-  ner: { mode: 'quantized' },
-  keyProvider
-});
-await anonymizer.initialize();
+- Detect structured PII such as emails, phone numbers, credit cards, IPs, and URLs
+- Add optional NER-based detection for names, organizations, and locations
+- Encrypt original values for later rehydration
+- Integrate with apps, services, agents, proxies, and streaming workflows
 
-// 1. Anonymize before sending to AI
-const original = 'Contact John Smith at john@acme.com';
-const result = await anonymizer.anonymize(original);
-// → "Contact <PII type="PERSON" id="1"/> at <PII type="EMAIL" id="1"/>"
+### CLI Tool
 
-// 2. Send to translation API (PII is protected!)
-const translated = await translateAPI(result.anonymizedText);
-// → "Kontaktieren Sie <PII type="PERSON" id="1"/> unter <PII type="EMAIL" id="1"/>"
+Use `@rehydra/cli` when you want to work with files or piped text without writing code.
 
-// 3. Restore original values
-const piiMap = await decryptPIIMap(result.piiMap, await keyProvider.getKey());
-const final = rehydrate(translated, piiMap);
-// → "Kontaktieren Sie John Smith unter john@acme.com"
-```
+- Anonymize text from files or stdin
+- Inspect what would be detected before changing anything
+- Rehydrate text using a saved encrypted PII map
+- Fit Rehydra into shell scripts and local workflows
 
-## Platform Support
+### OpenCode Plugin
 
-| Environment | Version | Notes |
-|-------------|---------|-------|
-| Node.js | ≥ 18.0.0 | Uses native `onnxruntime-node` |
-| Bun | ≥ 1.0.0 | Requires `onnxruntime-web` |
-| Browsers | Chrome 86+, Firefox 89+, Safari 15.4+, Edge 86+ | Uses OPFS for model storage |
+Use `@rehydra/opencode` when you want OpenCode to scrub secrets before they are sent to an LLM.
 
-## Next Steps
+- Scan `.env` values locally
+- Replace detected secrets with placeholders in prompts and tool inputs
+- Restore original values before local tool execution
+- Add privacy protection to agent workflows with minimal setup
+
+## How Rehydra Works
+
+<Steps>
+  <Step title="Detect locally">
+    Rehydra identifies sensitive values on your machine before they leave your environment.
+  </Step>
+  <Step title="Replace safely">
+    It swaps originals for stable placeholders that downstream systems can handle safely.
+  </Step>
+  <Step title="Restore when needed">
+    Rehydra can decrypt and rehydrate the original values in the right local context.
+  </Step>
+</Steps>
+
+## What You Can Protect
 
 <CardGroup cols={2}>
-  <Card title="Quick Start" icon="play" href="/quickstart">
-    Set up Rehydra in your project
+  <Card title="Structured PII" icon="at">
+    Emails, phone numbers, IBANs, credit cards, IP addresses, URLs, and more.
+  </Card>
+  <Card title="Soft PII" icon="brain">
+    Names, organizations, and locations with the optional NER model.
+  </Card>
+  <Card title="Secrets" icon="key">
+    API keys, tokens, connection strings, and other environment-based credentials.
+  </Card>
+  <Card title="Encrypted Mappings" icon="lock">
+    Original values are stored in encrypted form for later restoration.
+  </Card>
+</CardGroup>
+
+## Start Here
+
+<CardGroup cols={2}>
+  <Card title="Choose a Product" icon="rocket" href="/quickstart">
+    Start with the SDK, CLI, or OpenCode plugin.
   </Card>
   <Card title="Installation" icon="download" href="/installation">
-    Detailed installation for all platforms
+    See install commands for each environment and package.
   </Card>
-  <Card title="PII Types" icon="shield" href="/concepts/pii-types">
-    Understand what PII is detected
+  <Card title="CLI Guide" icon="terminal" href="/guides/cli">
+    Learn the terminal workflow and available commands.
   </Card>
-  <Card title="API Reference" icon="book" href="/api-reference/introduction">
-    Explore the complete API
+  <Card title="OpenCode Plugin Guide" icon="shield" href="/guides/opencode-plugin">
+    Set up automatic secret scrubbing for OpenCode.
   </Card>
 </CardGroup>
