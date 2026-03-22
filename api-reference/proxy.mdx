@@ -54,10 +54,15 @@ The same client type `T`, with fetch intercepted for anonymization.
 ```typescript
 import OpenAI from 'openai';
 import { wrapLLMClient } from 'rehydra/proxy';
+import { InMemoryKeyProvider, SQLitePIIStorageProvider } from 'rehydra';
+
+const storage = new SQLitePIIStorageProvider('./pii.db');
+await storage.initialize();
 
 const client = wrapLLMClient(new OpenAI(), {
   anonymizer: { ner: { mode: 'quantized' } },
   keyProvider: new InMemoryKeyProvider(),
+  piiStorageProvider: storage,
   getSessionId: () => 'session-1',
 });
 ```
@@ -88,10 +93,15 @@ A `fetch`-compatible function.
 
 ```typescript
 import { createRehydraFetch } from 'rehydra/proxy';
+import { InMemoryKeyProvider, SQLitePIIStorageProvider } from 'rehydra';
+
+const storage = new SQLitePIIStorageProvider('./pii.db');
+await storage.initialize();
 
 const fetch = createRehydraFetch({
   anonymizer: { ner: { mode: 'quantized' } },
   keyProvider: new InMemoryKeyProvider(),
+  piiStorageProvider: storage,
   provider: 'openai',  // or 'anthropic', or auto-detected
   getSessionId: () => 'session-1',
 });
@@ -130,11 +140,16 @@ A function `(request: Request) => Promise<Response>` compatible with Bun.serve, 
 
 ```typescript
 import { createRehydraProxy } from 'rehydra/proxy';
+import { InMemoryKeyProvider, SQLitePIIStorageProvider } from 'rehydra';
+
+const storage = new SQLitePIIStorageProvider('./pii.db');
+await storage.initialize();
 
 const proxy = createRehydraProxy({
   upstream: 'https://api.openai.com',
   anonymizer: { ner: { mode: 'quantized' } },
   keyProvider: new InMemoryKeyProvider(),
+  piiStorageProvider: storage,
   getSessionId: () => 'session-1',
 });
 
@@ -164,7 +179,7 @@ function createRehydraProxyServer(
     <ParamField path="port" type="number" default="8080">
       Port to listen on
     </ParamField>
-    <ParamField path="host" type="string" default="'localhost'">
+    <ParamField path="host" type="string" default="'127.0.0.1'">
       Host to bind to
     </ParamField>
   </Expandable>
@@ -185,12 +200,17 @@ interface RehydraProxyServer {
 
 ```typescript
 import { createRehydraProxyServer } from 'rehydra/proxy';
+import { InMemoryKeyProvider, SQLitePIIStorageProvider } from 'rehydra';
+
+const storage = new SQLitePIIStorageProvider('./pii.db');
+await storage.initialize();
 
 const server = await createRehydraProxyServer({
   upstream: 'https://api.openai.com',
   port: 8080,
   anonymizer: { ner: { mode: 'quantized' } },
   keyProvider: new InMemoryKeyProvider(),
+  piiStorageProvider: storage,
   getSessionId: () => 'session-1',
 });
 
@@ -206,23 +226,23 @@ await server.close();
 
 ```typescript
 interface RehydraFetchConfig {
+  // Encryption key provider (required)
+  keyProvider: KeyProvider;
+
+  // Storage for session persistence (required)
+  piiStorageProvider: PIIStorageProvider;
+
   // Anonymizer configuration
   anonymizer?: AnonymizerConfig;
 
   // Policy override
   policy?: Partial<AnonymizationPolicy>;
 
-  // Encryption key provider
-  keyProvider?: KeyProvider;
-
-  // Storage for session persistence
-  piiStorageProvider?: PIIStorageProvider;
-
-  // Provider hint: 'openai' | 'anthropic' (auto-detected if omitted)
-  provider?: string;
+  // Provider hint (auto-detected if omitted)
+  provider?: 'openai' | 'anthropic' | 'auto';
 
   // Derive session ID from request
-  getSessionId?: (request: Request) => string;
+  getSessionId?: (request: Request) => string | Promise<string>;
 
   // Handle streaming responses (default: true)
   handleStreaming?: boolean;
@@ -241,7 +261,9 @@ interface RehydraProxyConfig extends RehydraFetchConfig {
   // Upstream LLM API URL (e.g., 'https://api.openai.com')
   upstream: string;
 
-  // Forward these headers from the original request (default: all)
+  // Headers to forward to upstream
+  // Default: ['authorization', 'content-type', 'x-api-key',
+  //   'anthropic-version', 'openai-organization', 'openai-project']
   forwardHeaders?: string[];
 
   // Strip this prefix from the request path before forwarding
@@ -269,15 +291,42 @@ function detectProvider(
 
 ```typescript
 interface LLMContentProvider {
-  name: string;
+  readonly name: string;
+
+  // Request detection
   matchesRequest(url: string, headers: Headers): boolean;
-  extractRequestText(body: object): string[];
-  rebuildRequestBody(body: object, anonymizedTexts: string[]): object;
-  extractResponseText(body: object): string[];
-  rebuildResponseBody(body: object, rehydratedTexts: string[]): object;
-  extractSSEDelta(data: object): string | null;
-  rebuildSSEDelta(data: object, rehydratedText: string): object;
-  isStreamingRequest(body: object): boolean;
+  isStreamingRequest(body: unknown): boolean;
+
+  // Request handling
+  extractRequestText(body: unknown): string[];
+  rebuildRequestBody(body: unknown, anonymizedTexts: string[]): unknown;
+
+  // Non-streaming response handling
+  extractResponseText(body: unknown): string[];
+  rebuildResponseBody(body: unknown, rehydratedTexts: string[]): unknown;
+
+  // Streaming content handling
+  extractSSEDelta(data: unknown): string | null;
+  rebuildSSEDelta(data: unknown, rehydratedText: string): unknown;
+
+  // Tool/function call handling (non-streaming)
+  extractResponseToolCalls?(body: unknown): string[];
+  rebuildResponseToolCalls?(body: unknown, rehydratedArgs: string[]): unknown;
+
+  // Tool/function call handling (streaming)
+  extractSSEToolCallDeltas?(data: unknown): ToolCallDelta[] | null;
+  rebuildSSEToolCallDeltas?(data: unknown, rehydratedArgs: Map<number, string>): unknown;
+  extractSSEToolCallStop?(data: unknown): number | null;
+}
+
+interface ToolCallDelta {
+  index: number;
+  arguments: string;
+}
+
+interface SSEEvent {
+  event: string;   // defaults to 'message'
+  data: string;
 }
 ```
 

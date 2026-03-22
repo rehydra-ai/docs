@@ -83,11 +83,15 @@ Replace the `fetch` function used by any SDK:
 
 ```typescript
 import { createRehydraFetch } from 'rehydra/proxy';
-import { InMemoryKeyProvider } from 'rehydra';
+import { InMemoryKeyProvider, SQLitePIIStorageProvider } from 'rehydra';
+
+const storage = new SQLitePIIStorageProvider('./pii.db');
+await storage.initialize();
 
 const rehydraFetch = createRehydraFetch({
   anonymizer: { ner: { mode: 'quantized' } },
   keyProvider: new InMemoryKeyProvider(),
+  piiStorageProvider: storage,
   getSessionId: (req) => 'session-123',
 });
 
@@ -113,12 +117,16 @@ For framework integration (Hono, Bun.serve, etc.):
 
 ```typescript
 import { createRehydraProxy } from 'rehydra/proxy';
-import { InMemoryKeyProvider } from 'rehydra';
+import { InMemoryKeyProvider, SQLitePIIStorageProvider } from 'rehydra';
+
+const storage = new SQLitePIIStorageProvider('./pii.db');
+await storage.initialize();
 
 const proxy = createRehydraProxy({
   upstream: 'https://api.openai.com',
   anonymizer: { ner: { mode: 'quantized' } },
   keyProvider: new InMemoryKeyProvider(),
+  piiStorageProvider: storage,
   getSessionId: (req) => 'session-123',
 });
 
@@ -150,13 +158,17 @@ Start a proxy server with one function call:
 
 ```typescript
 import { createRehydraProxyServer } from 'rehydra/proxy';
-import { InMemoryKeyProvider } from 'rehydra';
+import { InMemoryKeyProvider, SQLitePIIStorageProvider } from 'rehydra';
+
+const storage = new SQLitePIIStorageProvider('./pii.db');
+await storage.initialize();
 
 const server = await createRehydraProxyServer({
   upstream: 'https://api.openai.com',
   port: 8080,
   anonymizer: { ner: { mode: 'quantized' } },
   keyProvider: new InMemoryKeyProvider(),
+  piiStorageProvider: storage,
   getSessionId: (req) => 'session-123',
 });
 
@@ -196,6 +208,73 @@ for await (const chunk of stream) {
 }
 ```
 
+### Streaming Internals
+
+PII placeholders like `<PII type="EMAIL" id="1"/>` can span SSE chunk boundaries. The proxy buffers incomplete tags across chunks and only rehydrates once a complete tag is available, so streaming rehydration is reliable regardless of how the upstream chunks its response.
+
+You can disable streaming rehydration if needed:
+
+```typescript
+const wrappedClient = wrapLLMClient(client, {
+  keyProvider: new InMemoryKeyProvider(),
+  piiStorageProvider: storage,
+  handleStreaming: false,  // SSE responses pass through without rehydration
+});
+```
+
+## Passthrough Behavior
+
+The proxy only intercepts **POST requests with `application/json` content type**. Everything else is forwarded unchanged:
+
+- **Non-POST requests** (GET, OPTIONS, etc.) — passed through to upstream
+- **Non-JSON content types** — passed through to upstream
+- **Non-JSON responses** — passed through with original status code
+
+This means health checks, CORS preflight, and other non-chat requests work without interference.
+
+---
+
+## Tool Call Handling
+
+The proxy automatically anonymizes and rehydrates tool/function call arguments. If the LLM returns a tool call whose arguments contain PII placeholders, Rehydra rehydrates them before your code sees the result.
+
+This works for both non-streaming and streaming responses:
+
+```typescript
+const wrappedClient = wrapLLMClient(client, {
+  anonymizer: { ner: { mode: 'quantized' } },
+  keyProvider: new InMemoryKeyProvider(),
+  piiStorageProvider: storage,
+  getSessionId: () => 'session-123',
+});
+
+const response = await wrappedClient.chat.completions.create({
+  model: 'gpt-4',
+  messages: [{ role: 'user', content: 'Send an email to John Smith at john@acme.com' }],
+  tools: [{
+    type: 'function',
+    function: {
+      name: 'send_email',
+      parameters: {
+        type: 'object',
+        properties: {
+          to: { type: 'string' },
+          name: { type: 'string' },
+        },
+      },
+    },
+  }],
+});
+
+// Tool call arguments are rehydrated — original PII values restored
+const args = JSON.parse(response.choices[0].message.tool_calls[0].function.arguments);
+// { to: "john@acme.com", name: "John Smith" }
+```
+
+In streaming mode, tool call argument chunks are buffered per tool call index and rehydrated when the tool call completes.
+
+---
+
 ## Session Management
 
 Use `getSessionId` to associate requests with sessions. This enables consistent entity IDs and cross-request rehydration:
@@ -212,6 +291,28 @@ const wrappedClient = wrapLLMClient(client, {
   },
 });
 ```
+
+## Error Handling
+
+When the proxy encounters an error, it returns a JSON response with the following shape:
+
+```json
+{
+  "error": {
+    "message": "description of what went wrong",
+    "type": "rehydra_proxy_error"
+  }
+}
+```
+
+| Status Code | Meaning |
+|-------------|---------|
+| 400 | Invalid JSON in the request body |
+| 500 | Internal proxy error during anonymization or rehydration |
+| 502 | Upstream LLM API is unreachable |
+| 503 | Proxy not ready (initialization failed) |
+
+---
 
 ## Next Steps
 
