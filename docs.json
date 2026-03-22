@@ -33,6 +33,7 @@
             "group": "Guides",
             "pages": [
               "guides/cli",
+              "guides/opencode-plugin",
               "guides/ner-detection",
               "guides/semantic-enrichment",
               "guides/sessions-storage",

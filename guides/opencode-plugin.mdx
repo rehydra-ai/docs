@@ -1,0 +1,158 @@
+---
+title: "OpenCode Plugin"
+description: "Prevent your coding agent from leaking secrets to LLM providers"
+---
+
+The Rehydra OpenCode plugin intercepts the conversation between [OpenCode](https://github.com/sst/opencode) and the LLM. Secrets from your `.env` files are replaced with placeholders before they leave your machine, and transparently restored before any tool executes locally.
+
+```
+You                          LLM Provider
+ |                                |
+ |  "set key AKIA4EXA..."        |
+ |  ───────────────────►         |
+ |        ┌─────────┐            |
+ |        │ rehydra │            |
+ |        └────┬────┘            |
+ |             │                 |
+ |  "set key <PII id="1"/>"     |
+ |  ─────────────────────────►   |
+ |                                |
+ |  "$ zwrm set KEY <PII .../>"  |
+ |  ◄─────────────────────────   |
+ |        ┌─────────┐            |
+ |        │ rehydra │            |
+ |        └────┬────┘            |
+ |             ▼                 |
+ |  $ zwrm set KEY AKIA4EXA...  |
+```
+
+The LLM never sees real secret values. Your tools run with them.
+
+## Installation
+
+```bash
+npm install @rehydra/opencode
+```
+
+Add the plugin to your `opencode.json`:
+
+```json
+{
+  "plugin": ["@rehydra/opencode"]
+}
+```
+
+By default, the plugin reads `.env` in your project root. Secrets with values of 8+ characters are detected and scrubbed.
+
+<Note>
+Requires Node.js 18+ and depends on the `rehydra` SDK package (installed automatically).
+</Note>
+
+## Configuration
+
+For custom settings, create `.opencode/plugins/rehydra.ts`:
+
+```typescript
+import { createRehydraPlugin } from "@rehydra/opencode";
+
+export default createRehydraPlugin({
+  // Scan multiple env files
+  envFiles: [".env", ".env.local", ".env.production"],
+
+  // Always redact these values, even if not in .env
+  redactValues: ["sk-live-abc123..."],
+
+  // Minimum value length to consider a secret (default: 8)
+  minValueLength: 6,
+});
+```
+
+### Options
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `envFiles` | `string[]` | `[".env"]` | `.env` files to scan for secret values |
+| `redactValues` | `string[]` | `[]` | Explicit values to always redact |
+| `minValueLength` | `number` | `8` | Minimum value length to consider a secret |
+| `locale` | `string` | | Locale hint for anonymization (e.g., `de-DE`) |
+| `policy` | `AnonymizationPolicy` | | Policy overrides for anonymization behavior |
+| `anonymizer` | `AnonymizerConfig` | | Advanced: full anonymizer config (overrides `envFiles`, `redactValues`, and `minValueLength`) |
+
+## What Gets Detected
+
+- Environment variable values from `.env` files
+- API keys, tokens, and credentials (pattern-based)
+- AWS access keys and secret keys
+- JWTs, private keys, connection strings
+- Any values passed via `redactValues`
+
+## How It Works
+
+The plugin uses five OpenCode hooks — everything runs locally and no data leaves your machine except the scrubbed conversation sent to the LLM provider.
+
+| Hook | What it does |
+|------|-------------|
+| `messages.transform` | Scrubs secrets from all message text and tool outputs before they reach the LLM |
+| `system.transform` | Injects an instruction telling the LLM to treat placeholders as real values |
+| `tool.execute.before` | Restores real values in tool arguments before local execution |
+| `tool.execute.after` | Restores real values in displayed tool output |
+| `text.complete` | Restores real values in LLM response text shown to you |
+
+<Tip>
+The system prompt instruction is only injected after at least one secret has been anonymized, keeping prompts clean when no secrets are present.
+</Tip>
+
+### Session Handling
+
+Each OpenCode session gets its own Rehydra session. PII mappings are consistent within a session — the same secret always maps to the same placeholder, so the LLM can reason about relationships between values without seeing the real data.
+
+### Tool Argument Rehydration
+
+When the LLM generates a tool call (e.g., a shell command containing a placeholder), the plugin deep-walks all argument values and restores real secrets before execution. This means commands like `git push`, `curl`, or `zwrm secrets set` receive the actual credential values.
+
+<Note>
+OpenCode's `tool.execute.before` hook passes args by reference — the plugin mutates args in-place rather than replacing the object, which is required for the rehydrated values to take effect.
+</Note>
+
+## Logging
+
+Plugin activity is logged to OpenCode's log directory (`~/.local/share/opencode/log/`). Run OpenCode with `--log-level DEBUG` for detailed output.
+
+```
+INFO service=rehydra scrubbed={"ENV_VAR_SECRET":2} messageCount=3 scrubbed 2 secret(s) from messages
+INFO service=rehydra tool=bash callID=call_abc123 rehydrated PII tags in tool args
+```
+
+## Advanced: Full Anonymizer Config
+
+For full control, pass an `anonymizer` config directly. This overrides `envFiles`, `redactValues`, and `minValueLength`:
+
+```typescript
+import { createRehydraPlugin } from "@rehydra/opencode";
+
+export default createRehydraPlugin({
+  anonymizer: {
+    secrets: {
+      enabled: true,
+      envFiles: [".env", ".env.local"],
+      minValueLength: 6,
+    },
+    ner: {
+      mode: "quantized",
+    },
+  },
+});
+```
+
+See the [`createAnonymizer` API reference](/api-reference/create-anonymizer) for all available options.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="PII Types" icon="shield" href="/concepts/pii-types">
+    See all PII types Rehydra can detect
+  </Card>
+  <Card title="LLM Proxy" icon="server" href="/guides/llm-proxy">
+    Anonymize API calls in server-side workflows
+  </Card>
+</CardGroup>
