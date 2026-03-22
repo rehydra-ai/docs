@@ -24,8 +24,11 @@
           {
             "group": "Core Concepts",
             "pages": [
-              "concepts/pii-types",
               "concepts/anonymization-pipeline",
+              "concepts/pii-types",
+              "concepts/rehydration",
+              "concepts/recognizers",
+              "concepts/configuration",
               "concepts/encryption"
             ]
           },

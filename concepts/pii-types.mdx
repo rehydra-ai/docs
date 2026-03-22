@@ -1,156 +1,96 @@
 ---
 title: "PII Types"
-description: "Understand the types of personally identifiable information Rehydra can detect"
+description: "Understand the categories of sensitive data Rehydra can detect"
 ---
 
-Rehydra detects two categories of PII: **structured PII** (detected via regex) and **soft PII** (detected via NER model).
+Rehydra detects different kinds of sensitive values through a combination of regex recognizers, optional NER, and custom patterns.
 
-## Structured PII (Regex Detection)
+## Detection Categories
 
-These types have well-defined patterns and are detected using optimized regular expressions with validation.
+### Structured PII
 
-| Type | Description | Example | Validation |
-|------|-------------|---------|------------|
-| `EMAIL` | Email addresses | `john@example.com` | RFC 5322 format |
-| `PHONE` | Phone numbers (international) | `+49 30 123456` | E.164 patterns |
-| `IBAN` | International Bank Account Numbers | `DE89370400440532013000` | Checksum validation |
-| `BIC_SWIFT` | Bank Identifier Codes | `COBADEFFXXX` | Format validation |
-| `CREDIT_CARD` | Credit card numbers | `4111111111111111` | Luhn algorithm |
-| `IP_ADDRESS` | IPv4 and IPv6 addresses | `192.168.1.1` | Format validation |
-| `URL` | Web URLs | `https://example.com` | URI format |
-| `ACCOUNT_NUMBER` | Generic account numbers | `ACC-12345678` | Configurable pattern |
-| `TAX_ID` | Tax identification numbers | `DE123456789` | Configurable pattern |
-| `NATIONAL_ID` | National ID numbers | `SSN 123-45-6789` | Configurable pattern |
-| `CASE_ID` | Case/ticket numbers | `CASE-12345` | Configurable pattern |
-| `CUSTOMER_ID` | Customer identifiers | `CUST-ABC123` | Configurable pattern |
+Structured PII has recognizable formats and is usually detected with regex-based recognizers.
 
-## Soft PII (NER Detection)
+Common examples include:
 
-These types require contextual understanding and are detected using a trained NER (Named Entity Recognition) model.
+- `EMAIL`
+- `PHONE`
+- `IBAN`
+- `BIC_SWIFT`
+- `CREDIT_CARD`
+- `IP_ADDRESS`
+- `URL`
+- `ACCOUNT_NUMBER`
+- `TAX_ID`
+- `NATIONAL_ID`
 
-| Type | Description | Example | Semantic Attributes |
-|------|-------------|---------|---------------------|
-| `PERSON` | Person names | `John Smith`, `Maria` | `gender` (male/female/neutral) |
-| `ORG` | Organization names | `Acme Corp`, `Google` | — |
-| `LOCATION` | Places and locations | `Berlin`, `Germany` | `scope` (city/country/region) |
-| `ADDRESS` | Physical addresses | `123 Main St` | — |
-| `DATE_OF_BIRTH` | Dates of birth | `born on March 15, 1990` | — |
+### Contextual PII
 
-<Note>
-NER detection requires initializing with a model mode other than `'disabled'`. See the [NER Detection Guide](/guides/ner-detection) for setup.
-</Note>
+Contextual or "soft" PII depends on meaning and surrounding text, so it uses the optional NER model.
 
-## Priority Resolution
+Common examples include:
 
-When multiple detections overlap (e.g., an email that's also a URL), Rehydra uses priority ordering:
+- `PERSON`
+- `ORG`
+- `LOCATION`
 
-```
-Lower Priority                                                        Higher Priority
-────────────────────────────────────────────────────────────────────────────────────→
-URL → IP → LOCATION → ORG → PERSON → PHONE → EMAIL → IBAN → CREDIT_CARD → Custom IDs
-```
+### Domain-Specific Identifiers
 
-Higher priority types take precedence when spans overlap. Custom ID patterns (CASE_ID, CUSTOMER_ID) take precedence over generic types.
+Some teams need to protect internal identifiers that are specific to their systems.
 
-## Detection Sources
+Typical examples include:
 
-Each detected entity has a `source` indicating how it was found:
+- `CASE_ID`
+- `CUSTOMER_ID`
+- Order numbers
+- Employee IDs
+- Support ticket IDs
 
-| Source | Description |
-|--------|-------------|
-| `REGEX` | Detected via regex pattern matching |
-| `NER` | Detected via NER model inference |
-| `HYBRID` | Detected by both regex and NER (overlapping spans merged) |
+These are usually added through custom recognizers or policy-level custom patterns.
 
-## Confidence Thresholds
+## Where Types Come From
 
-NER-detected entities have confidence scores. You can configure minimum thresholds:
+| Source | Best for | Examples |
+|--------|----------|----------|
+| Built-in regex recognizers | Stable, well-formed formats | Email, phone, IBAN, credit card |
+| Optional NER model | Meaning-dependent entities | Person, organization, location |
+| Custom recognizers | Business-specific identifiers | Case IDs, customer IDs, proprietary formats |
 
-```typescript
-const anonymizer = createAnonymizer({
-  ner: { 
-    mode: 'quantized',
-    thresholds: {
-      PERSON: 0.8,    // Require 80% confidence for names
-      ORG: 0.7,       // 70% for organizations
-      LOCATION: 0.6,  // 60% for locations
-    }
-  }
-});
-```
+## Type Selection and Policy
 
-## Type-Specific Detection Control
-
-Enable or disable specific PII types:
+You do not have to detect every supported type on every call. Rehydra policies let you narrow detection to the types that matter for a given workflow.
 
 ```typescript
 import { createAnonymizer, PIIType } from 'rehydra';
 
 const anonymizer = createAnonymizer({
   defaultPolicy: {
-    // Only detect these regex types
-    regexEnabledTypes: new Set([
-      PIIType.EMAIL, 
-      PIIType.PHONE,
-    ]),
-    // Only detect these NER types
-    nerEnabledTypes: new Set([
-      PIIType.PERSON,
-    ]),
+    regexEnabledTypes: new Set([PIIType.EMAIL, PIIType.PHONE]),
+    nerEnabledTypes: new Set([PIIType.PERSON]),
   }
 });
 ```
 
-## Custom ID Patterns
+## Overlaps and Priority
 
-Add domain-specific patterns for case IDs and customer IDs:
+Some values can match more than one detector. Rehydra resolves overlaps using the configured type priority and confidence rules so only one placeholder is emitted for a given span.
 
-```typescript
-import { createCustomIdRecognizer, PIIType } from 'rehydra';
+## Placeholder Shape
 
-const customRecognizer = createCustomIdRecognizer([
-  {
-    name: 'Order Number',
-    pattern: /\bORD-[A-Z0-9]{8}\b/g,
-    type: PIIType.CASE_ID,
-  },
-  {
-    name: 'Customer ID',
-    pattern: /\bCUST-[0-9]{6}\b/g,
-    type: PIIType.CUSTOMER_ID,
-  },
-]);
-
-const anonymizer = createAnonymizer();
-anonymizer.getRegistry().register(customRecognizer);
-```
-
-## Placeholder Format
-
-Detected PII is replaced with XML-like placeholder tags:
+Types appear in the placeholder output and in entity metadata:
 
 ```xml
-<!-- Basic format -->
 <PII type="EMAIL" id="1"/>
-
-<!-- With semantic attributes -->
-<PII type="PERSON" gender="female" id="1"/>
-<PII type="LOCATION" scope="city" id="2"/>
+<PII type="PERSON" id="1"/>
 ```
-
-The placeholder format is designed to be:
-- **Preserved by translation APIs** — Most services treat XML-like tags as non-translatable
-- **Parseable** — Easy to extract for rehydration
-- **Informative** — Type and attributes help with contextual translation
 
 ## Next Steps
 
 <CardGroup cols={2}>
-  <Card title="NER Detection" icon="brain" href="/guides/ner-detection">
-    Configure the NER model for soft PII detection
+  <Card title="Recognizers" icon="scan-search" href="/concepts/recognizers">
+    See how Rehydra finds structured, contextual, and custom PII.
   </Card>
   <Card title="Custom Recognizers" icon="code" href="/guides/custom-recognizers">
-    Add your own detection patterns
+    Add your own domain-specific patterns.
   </Card>
 </CardGroup>
-

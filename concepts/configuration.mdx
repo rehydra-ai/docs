@@ -1,0 +1,89 @@
+---
+title: "Configuration"
+description: "How Rehydra settings shape detection, output, and runtime behavior"
+---
+
+Rehydra configuration controls what gets detected, how text is protected, and whether the workflow is reversible.
+
+## Main Configuration Areas
+
+### Mode
+
+Choose whether the workflow is reversible:
+
+- `pseudonymize` for encrypted mappings and later rehydration
+- `anonymize` for irreversible protection
+
+### Detection
+
+Control which detectors are active:
+
+- Built-in regex recognizers
+- Optional NER model
+- Custom recognizers and custom ID patterns
+
+### Policy
+
+Policies shape detection behavior for each call or as a default:
+
+- Enabled regex and NER types
+- Confidence thresholds
+- Type priority for overlaps
+- Allowlists and denylists
+- ID reuse behavior
+- Leak scanning and semantic masking
+
+### Runtime Integrations
+
+Configuration also covers runtime behavior such as:
+
+- Key providers for reversible workflows
+- Storage providers for sessions
+- NER model backend and download settings
+- Semantic enrichment options
+
+## Example
+
+```typescript
+import { createAnonymizer, PIIType } from 'rehydra';
+
+const anonymizer = createAnonymizer({
+  mode: 'pseudonymize',
+  ner: { mode: 'quantized' },
+  semantic: { enabled: false },
+  defaultPolicy: {
+    regexEnabledTypes: new Set([PIIType.EMAIL, PIIType.PHONE]),
+    nerEnabledTypes: new Set([PIIType.PERSON]),
+    enableLeakScan: true,
+  }
+});
+```
+
+## Configuration Levels
+
+Rehydra settings typically live at two levels:
+
+- `createAnonymizer()` configuration for reusable defaults
+- Per-call policy overrides when a specific operation needs different rules
+
+This lets you keep a stable baseline while still adapting behavior for individual workflows.
+
+## Keep Concepts Separate
+
+It helps to think about configuration in layers:
+
+- Mode decides reversibility
+- Recognizers decide what can be found
+- Policy decides what should be found right now
+- Key and storage settings decide how reversible data is managed
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="createAnonymizer" icon="plus" href="/api-reference/create-anonymizer">
+    Review the full SDK configuration surface.
+  </Card>
+  <Card title="Recognizers" icon="scan-search" href="/concepts/recognizers">
+    Understand the detection layer you are configuring.
+  </Card>
+</CardGroup>

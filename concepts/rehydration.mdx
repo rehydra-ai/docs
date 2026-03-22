@@ -1,0 +1,65 @@
+---
+title: "Rehydration"
+description: "How Rehydra restores original values in reversible workflows"
+---
+
+Rehydration is the step that turns placeholder-based text back into its original values. It only works when the text was produced in `pseudonymize` mode and you still have the matching encryption key.
+
+## When Rehydration Is Possible
+
+Rehydration requires all of the following:
+
+- The text was processed in `pseudonymize` mode
+- You kept the returned encrypted `piiMap`
+- You still have the correct key to decrypt that `piiMap`
+
+If any of these are missing, rehydration cannot restore the originals.
+
+## Basic Flow
+
+```typescript
+import { decryptPIIMap, rehydrate } from 'rehydra';
+
+const key = await keyProvider.getKey();
+const piiMap = await decryptPIIMap(result.piiMap, key);
+const restored = rehydrate(textWithPlaceholders, piiMap);
+```
+
+## What Rehydration Uses
+
+Rehydra matches placeholders such as `<PII type="EMAIL" id="1"/>` against the decrypted map and replaces them with the original values.
+
+This means the placeholder structure must stay intact between protection and restoration.
+
+## Rehydration vs Anonymization
+
+| Workflow | `piiMap` exists | Originals recoverable |
+|----------|------------------|-----------------------|
+| `pseudonymize` | Yes | Yes |
+| `anonymize` | No | No |
+
+## Common Failure Modes
+
+- Using the wrong key
+- Losing the encrypted `piiMap`
+- Running in `anonymize` mode instead of `pseudonymize`
+- Modifying placeholder tags so they no longer match the stored mapping
+
+## Where It Shows Up
+
+Rehydration is part of:
+
+- SDK workflows using `decryptPIIMap()` and `rehydrate()`
+- CLI workflows using `rehydra rehydrate`
+- Agent and plugin flows that restore values locally before tool execution
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Encryption & Security" icon="lock" href="/concepts/encryption">
+    Learn how `piiMap` data and keys are handled.
+  </Card>
+  <Card title="Anonymization & Pseudonymization" icon="masks-theater" href="/concepts/anonymization-pipeline">
+    See how reversible and irreversible modes differ.
+  </Card>
+</CardGroup>

@@ -1,0 +1,78 @@
+---
+title: "Recognizers"
+description: "How Rehydra detects sensitive values across built-in, NER, and custom sources"
+---
+
+Recognizers are the detection building blocks in Rehydra. They decide which spans count as sensitive before placeholders are generated.
+
+## Three Recognizer Sources
+
+### Built-in Regex Recognizers
+
+These cover structured values with stable formats, such as emails, phone numbers, IBANs, URLs, and credit card numbers.
+
+They are fast, local, and usually the default foundation of a Rehydra setup.
+
+### NER-Based Detection
+
+The optional NER model handles contextual entities that are hard to capture with regex alone, especially:
+
+- `PERSON`
+- `ORG`
+- `LOCATION`
+
+This layer is useful when privacy depends on names and other meaning-dependent entities, not just formatted identifiers.
+
+### Custom Recognizers
+
+Custom recognizers let you add business-specific patterns like order IDs, support tickets, claim numbers, or internal account references.
+
+They are the right tool when your domain has sensitive identifiers the built-in recognizers do not know about.
+
+## How Recognizers Work Together
+
+Rehydra can combine multiple sources in one pass:
+
+- Regex recognizers detect structured values
+- NER detects contextual values if enabled
+- Custom recognizers add product- or company-specific coverage
+- Overlapping matches are resolved by policy rules
+
+## Registry and Extensibility
+
+The SDK exposes a recognizer registry so you can register or remove recognizers and even supply a custom registry to `createAnonymizer()`.
+
+```typescript
+const registry = anonymizer.getRegistry();
+registry.register(myRecognizer);
+```
+
+## Choosing the Right Recognizer Strategy
+
+Use built-in regex recognizers when:
+
+- Formats are predictable
+- You want fast local detection
+- You do not need model downloads
+
+Use NER when:
+
+- You need names, organizations, or locations
+- Context matters more than fixed format
+
+Use custom recognizers when:
+
+- You need to protect internal identifiers
+- Your domain uses proprietary patterns
+- You want narrow, high-precision rules for business data
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="PII Types" icon="shield" href="/concepts/pii-types">
+    See the categories recognizers map into.
+  </Card>
+  <Card title="Custom Recognizers" icon="code" href="/guides/custom-recognizers">
+    Implement your own recognizers and registry setup.
+  </Card>
+</CardGroup>
