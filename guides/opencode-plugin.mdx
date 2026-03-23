@@ -52,8 +52,8 @@ export default createRehydraPlugin({
   // Minimum value length to consider a secret (default: 8)
   minValueLength: 6,
 
-  // Disable detection of specific PII types
-  disableTypes: ["URL", "IP_ADDRESS"],
+  // Re-enable URL and IP_ADDRESS detection (disabled by default)
+  disableTypes: [],
 });
 ```
 
@@ -64,7 +64,7 @@ export default createRehydraPlugin({
 | `envFiles` | `string[]` | `[".env"]` | `.env` files to scan for secret values |
 | `redactValues` | `string[]` | `[]` | Explicit values to always redact |
 | `minValueLength` | `number` | `8` | Minimum value length to consider a secret |
-| `disableTypes` | `string[]` | `[]` | PII types to skip (e.g., `["URL", "IP_ADDRESS"]`) |
+| `disableTypes` | `string[]` | `["URL", "IP_ADDRESS"]` | PII types to skip — URLs and IP addresses are disabled by default since coding agents routinely work with these values |
 | `locale` | `string` | | Locale hint for anonymization (e.g., `de-DE`) |
 | `policy` | `AnonymizationPolicy` | | Policy overrides for anonymization behavior |
 | `anonymizer` | `AnonymizerConfig` | | Advanced: full anonymizer config (overrides `envFiles`, `redactValues`, and `minValueLength`) |
@@ -76,7 +76,7 @@ The plugin uses Rehydra's full detection suite automatically — no configuratio
 **Structured PII** — detected via pattern matching:
 - Emails, phone numbers, credit card numbers
 - IBANs, BIC/SWIFT codes, account numbers
-- IP addresses, URLs
+- IP addresses, URLs (disabled by default — set `disableTypes: []` to enable)
 - Tax IDs, national IDs
 
 **Secrets** — detected via provider-specific patterns:
