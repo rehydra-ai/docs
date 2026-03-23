@@ -51,6 +51,9 @@ export default createRehydraPlugin({
 
   // Minimum value length to consider a secret (default: 8)
   minValueLength: 6,
+
+  // Disable detection of specific PII types
+  disableTypes: ["URL", "IP_ADDRESS"],
 });
 ```
 
@@ -61,6 +64,7 @@ export default createRehydraPlugin({
 | `envFiles` | `string[]` | `[".env"]` | `.env` files to scan for secret values |
 | `redactValues` | `string[]` | `[]` | Explicit values to always redact |
 | `minValueLength` | `number` | `8` | Minimum value length to consider a secret |
+| `disableTypes` | `string[]` | `[]` | PII types to skip (e.g., `["URL", "IP_ADDRESS"]`) |
 | `locale` | `string` | | Locale hint for anonymization (e.g., `de-DE`) |
 | `policy` | `AnonymizationPolicy` | | Policy overrides for anonymization behavior |
 | `anonymizer` | `AnonymizerConfig` | | Advanced: full anonymizer config (overrides `envFiles`, `redactValues`, and `minValueLength`) |
