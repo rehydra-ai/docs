@@ -80,6 +80,52 @@ const anonymizer = createAnonymizer({
 Lower thresholds → more detections (potentially more false positives)
 Higher thresholds → fewer detections (may miss some entities)
 
+## Case Fallback
+
+The NER model is case-sensitive — it works best on properly capitalized text. This means lowercase names like `"tom"` or `"sarah"` can be missed. Enable `caseFallback` to run a second NER pass on title-cased text and merge any new detections:
+
+```typescript
+const anonymizer = createAnonymizer({
+  ner: {
+    mode: 'quantized',
+    caseFallback: true,
+  }
+});
+
+await anonymizer.initialize();
+
+await anonymizer.anonymize('hey tom, can you ask sarah to call me?');
+// "hey <PII type="PERSON" id="1"/>, can you ask <PII type="PERSON" id="2"/> to call me?"
+```
+
+Without `caseFallback`, neither `"tom"` nor `"sarah"` would be detected.
+
+### How it works
+
+1. The primary NER pass runs on the original text
+2. A second pass runs on title-cased text (e.g. `"tom"` → `"Tom"`)
+3. New detections from the fallback pass that don't overlap with primary detections are merged in
+4. Fallback detections keep the original lowercase text and character offsets
+5. A confidence penalty is applied to fallback detections to reduce false positives
+
+### Confidence penalty
+
+Fallback detections receive a confidence penalty (multiplied by `caseFallbackPenalty`, default `0.85`) since title-casing can introduce false positives. You can tune this:
+
+```typescript
+const anonymizer = createAnonymizer({
+  ner: {
+    mode: 'quantized',
+    caseFallback: true,
+    caseFallbackPenalty: 0.7,  // Stricter penalty
+  }
+});
+```
+
+<Warning>
+Enabling `caseFallback` doubles NER inference time since it runs two passes. Use it when your input text contains informal or uncapitalized names (chat messages, transcripts, etc.).
+</Warning>
+
 ## Auto-Download Control
 
 By default, models are downloaded automatically. To disable:

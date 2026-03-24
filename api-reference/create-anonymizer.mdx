@@ -46,6 +46,12 @@ function createAnonymizer(config?: AnonymizerConfig): Anonymizer
     <ParamField path="onDownloadProgress" type="DownloadProgressCallback">
       Download progress callback
     </ParamField>
+    <ParamField path="caseFallback" type="boolean" default="false">
+      Enable case-insensitive fallback for detecting lowercase names. Runs a second NER pass on title-cased text and merges new detections. Doubles NER inference time but catches names like `"tom"` that the case-sensitive model would otherwise miss.
+    </ParamField>
+    <ParamField path="caseFallbackPenalty" type="number" default="0.85">
+      Confidence penalty multiplier for case-fallback detections (0.0–1.0). Applied as `confidence * caseFallbackPenalty`. Lower values are stricter.
+    </ParamField>
     <ParamField path="backend" type="string" default="'local'">
       Inference backend: `'local'` (ONNX on device) or `'inference-server'` (remote GPU server)
     </ParamField>
