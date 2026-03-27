@@ -95,6 +95,32 @@ function createAnonymizer(config?: AnonymizerConfig): Anonymizer
   Default anonymization policy
 </ParamField>
 
+<ParamField path="secrets" type="SecretsConfig">
+  Secrets/credentials detection configuration
+
+  <Expandable title="SecretsConfig properties">
+    <ParamField path="enabled" type="boolean" default="false">
+      Enable secrets detection (API keys, tokens, connection strings, etc.)
+    </ParamField>
+    <ParamField path="envFiles" type="string[]">
+      Paths to `.env` files for literal value redaction
+    </ParamField>
+    <ParamField path="redactValues" type="boolean">
+      Redact secret values found in `.env` files
+    </ParamField>
+    <ParamField path="secretKeyPatterns" type="RegExp[]">
+      Additional patterns to match secret key names
+    </ParamField>
+    <ParamField path="minValueLength" type="number" default="4">
+      Minimum value length to consider a secret
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField path="onValidationWarning" type="(warnings: Array<{ code: string; message: string }>) => void">
+  Callback for validation warnings. When not provided, warnings are silently ignored — check `stats.leakScanPassed` in the result instead.
+</ParamField>
+
 <ParamField path="registry" type="RecognizerRegistry">
   Custom recognizer registry (uses default if not provided)
 </ParamField>

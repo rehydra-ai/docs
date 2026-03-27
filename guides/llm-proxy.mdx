@@ -275,6 +275,93 @@ In streaming mode, tool call argument chunks are buffered per tool call index an
 
 ---
 
+## Automated Tool Execution Loop
+
+For server-side agentic workflows, the proxy can manage the full multi-round tool execution loop automatically. Provide an `onToolCall` callback and the proxy will:
+
+1. Rehydrate tool call arguments (so your function receives real PII values)
+2. Call your callback with the tool name and parsed arguments
+3. Anonymize the tool result before sending it back to the LLM
+4. Repeat until the LLM responds with no tool calls, or `maxToolRounds` is reached
+
+```typescript
+import OpenAI from 'openai';
+import { createRehydraFetch } from 'rehydra/proxy';
+import { InMemoryKeyProvider, SQLitePIIStorageProvider } from 'rehydra';
+
+const storage = new SQLitePIIStorageProvider('./pii.db');
+await storage.initialize();
+
+const rehydraFetch = createRehydraFetch({
+  anonymizer: { ner: { mode: 'quantized' } },
+  keyProvider: new InMemoryKeyProvider(),
+  piiStorageProvider: storage,
+  getSessionId: () => 'session-1',
+
+  // Tool execution callback — arguments are already rehydrated
+  onToolCall: async (name, args, toolCallId) => {
+    if (name === 'send_email') {
+      return await sendEmail(args.to as string, args.body as string);
+    }
+    if (name === 'lookup_user') {
+      return await db.users.find(args.email as string);
+    }
+    return { error: `Unknown tool: ${name}` };
+  },
+
+  maxToolRounds: 5,  // default: 10
+});
+
+const client = new OpenAI({ fetch: rehydraFetch });
+
+// The proxy handles the full tool loop — this single call may
+// result in multiple LLM round-trips behind the scenes
+const response = await client.chat.completions.create({
+  model: 'gpt-4',
+  messages: [{ role: 'user', content: 'Send a welcome email to john@acme.com' }],
+  tools: [/* your tool definitions */],
+});
+
+// Final response (after all tool rounds complete)
+console.log(response.choices[0].message.content);
+```
+
+<Warning>
+The automated tool loop only works with **non-streaming** requests. For streaming tool calls, handle the tool loop manually using the rehydrated arguments from each streamed response.
+</Warning>
+
+---
+
+## PII System Instruction
+
+When PII is detected in an outgoing request, the proxy automatically injects a system instruction telling the LLM to preserve PII placeholder tags in its response. This prevents the model from inventing replacement values.
+
+The instruction is injected as an OpenAI system message or an Anthropic system field, depending on the provider.
+
+You can customize this behavior with the `systemInstruction` config option:
+
+```typescript
+const rehydraFetch = createRehydraFetch({
+  // ...
+
+  // Custom instruction
+  systemInstruction: 'Do not modify any <PII> XML tags in the conversation.',
+
+  // Or disable entirely
+  systemInstruction: false,
+
+  // Or omit for the built-in default (recommended)
+});
+```
+
+| Value | Behavior |
+|-------|----------|
+| `undefined` (default) | Built-in instruction injected when PII is detected |
+| `string` | Your custom instruction, injected when PII is detected |
+| `false` | No instruction injected |
+
+---
+
 ## Session Management
 
 Use `getSessionId` to associate requests with sessions. This enables consistent entity IDs and cross-request rehydration:

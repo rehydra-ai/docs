@@ -73,6 +73,20 @@ interface AnonymizerSession {
    * Check if this session exists in storage
    */
   exists(): Promise<boolean>;
+
+  /**
+   * Recursively anonymize all string leaves in a JSON-serializable value
+   */
+  anonymizeJson<T>(
+    value: T,
+    locale?: string,
+    policy?: Partial<AnonymizationPolicy>
+  ): Promise<T>;
+
+  /**
+   * Recursively rehydrate all string leaves in a JSON-serializable value
+   */
+  rehydrateJson<T>(value: T): Promise<T>;
 }
 ```
 
@@ -180,6 +194,54 @@ const session = anonymizer.session('chat-123');
 
 const wasDeleted = await session.delete();
 console.log(wasDeleted ? 'Deleted' : 'Not found');
+```
+
+---
+
+## session.anonymizeJson()
+
+Recursively walks a JSON-serializable value and anonymizes every string leaf. Non-string values (numbers, booleans, nulls) pass through unchanged. The PII map is saved to storage after processing.
+
+```typescript
+const session = anonymizer.session('chat-123');
+
+const toolArgs = {
+  to: 'john@acme.com',
+  subject: 'Meeting with Alice',
+  body: 'Hi Alice, call me at 555-0123.',
+};
+
+const anonymized = await session.anonymizeJson(toolArgs);
+// {
+//   to: '<PII type="EMAIL" id="1"/>',
+//   subject: 'Meeting with <PII type="PERSON" id="1"/>',
+//   body: 'Hi <PII type="PERSON" id="1"/>, call me at <PII type="PHONE" id="1"/>.',
+// }
+```
+
+Strings are processed **sequentially** (not in parallel) to ensure deterministic PII ID assignment.
+
+---
+
+## session.rehydrateJson()
+
+Recursively walks a JSON-serializable value and rehydrates every string leaf that contains PII placeholders.
+
+```typescript
+const session = anonymizer.session('chat-123');
+
+const anonymizedResult = {
+  status: 'sent',
+  recipient: '<PII type="EMAIL" id="1"/>',
+  message: 'Email sent to <PII type="PERSON" id="1"/>',
+};
+
+const rehydrated = await session.rehydrateJson(anonymizedResult);
+// {
+//   status: 'sent',
+//   recipient: 'john@acme.com',
+//   message: 'Email sent to Alice',
+// }
 ```
 
 ---

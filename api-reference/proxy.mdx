@@ -249,6 +249,20 @@ interface RehydraFetchConfig {
 
   // Locale hint
   locale?: string;
+
+  // Tool execution callback (non-streaming only)
+  // Arguments are rehydrated before calling; return value is anonymized
+  onToolCall?: (
+    name: string,
+    args: Record<string, unknown>,
+    toolCallId: string,
+  ) => unknown | Promise<unknown>;
+
+  // Maximum tool execution rounds (default: 10)
+  maxToolRounds?: number;
+
+  // PII system instruction: string to override, false to disable, undefined for default
+  systemInstruction?: string | false;
 }
 ```
 
@@ -268,6 +282,10 @@ interface RehydraProxyConfig extends RehydraFetchConfig {
 
   // Strip this prefix from the request path before forwarding
   stripPrefix?: string;
+
+  // API key to inject into upstream requests
+  // Adds Authorization header (OpenAI) or x-api-key header (Anthropic)
+  apiKey?: string;
 }
 ```
 

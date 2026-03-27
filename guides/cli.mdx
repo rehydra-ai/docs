@@ -106,6 +106,80 @@ rehydra inspect input.txt --ner quantized
 
 Output shows the original text with PII highlighted and labeled by type using color coding.
 
+### proxy
+
+Start a local HTTP proxy that anonymizes PII in requests to LLM APIs and rehydrates PII in responses.
+
+```bash
+# Start proxy for Anthropic (Claude Code, Cursor, etc.)
+rehydra proxy anthropic
+
+# Start proxy for OpenAI
+rehydra proxy openai
+
+# "claude" is an alias for "anthropic"
+rehydra proxy claude
+
+# Custom port
+rehydra proxy anthropic -p 9000
+
+# Inject an API key (bridges OAuth clients to API key auth)
+rehydra proxy anthropic --api-key sk-ant-...
+
+# Or set the key via environment variable
+export LLM_API_KEY=sk-ant-...
+rehydra proxy anthropic
+```
+
+**Supported providers:** `openai`, `anthropic`, `claude` (alias for `anthropic`)
+
+#### How It Works
+
+1. The proxy starts immediately with **regex-only** detection so there's no startup delay
+2. In the background, the NER model downloads (if needed) and loads
+3. Once NER is ready, the proxy **hot-swaps** to regex + NER detection — no restart required
+
+The `--ner` flag defaults to `quantized` for the proxy command (unlike other commands which default to `disabled`). Pass `--ner disabled` to use regex-only detection.
+
+#### Connecting Your Tools
+
+The proxy prints connection instructions on startup. Here are the common setups:
+
+<CodeGroup>
+```bash Claude Code
+ANTHROPIC_BASE_URL=http://127.0.0.1:8787 claude
+```
+
+```bash Cursor (Anthropic)
+# Settings → Models → Anthropic → Override Base URL
+# http://127.0.0.1:8787
+```
+
+```bash OpenAI SDK
+export OPENAI_BASE_URL=http://127.0.0.1:8787/v1
+# or: new OpenAI({ baseURL: "http://127.0.0.1:8787/v1" })
+```
+
+```bash Cursor (OpenAI)
+# Settings → Models → OpenAI → Override Base URL
+# http://127.0.0.1:8787/v1
+```
+</CodeGroup>
+
+#### API Key Injection
+
+Use `--api-key` (or the `LLM_API_KEY` environment variable) to inject an API key into upstream requests. This is useful when your tool authenticates via OAuth but the upstream API requires an API key:
+
+```bash
+# Claude Code with Max uses OAuth — bridge it to API key auth
+rehydra proxy claude --api-key sk-ant-...
+ANTHROPIC_BASE_URL=http://127.0.0.1:8787 claude
+```
+
+<Note>
+The proxy uses in-memory storage — PII maps are not persisted to disk. Each proxy session starts fresh.
+</Note>
+
 ### setup-ner
 
 Download the NER model ahead of time so anonymize/inspect don't need to download on first use.
@@ -143,6 +217,11 @@ rehydra rehydrate translated.txt -o final.txt
 | `--types <types>` | | all | Comma-separated PII types to detect |
 | `--mode <mode>` | | `pseudonymize` | `pseudonymize` (reversible) or `anonymize` (irreversible) |
 | `--locale <locale>` | | | Locale hint (e.g., `de-DE`) |
+| `--secrets` | | | Enable secrets/credentials detection |
+| `--env-file <file>` | | | `.env` file path for literal value redaction |
+| `--port <port>` | `-p` | `8787` | Proxy port (`proxy` command) |
+| `--upstream <url>` | | | Custom upstream URL, overrides provider default (`proxy` command) |
+| `--api-key <key>` | | | LLM API key for upstream, or set `LLM_API_KEY` env var (`proxy` command) |
 | `--no-color` | | | Disable colored output |
 | `--verbose` | | | Show detection statistics |
 | `--quiet` | `-q` | | Suppress non-essential output |

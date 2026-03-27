@@ -146,6 +146,9 @@ interface AnonymizerConfig {
     thresholds?: Partial<Record<PIIType, number>>;
     onStatus?: (status: string) => void;
     onDownloadProgress?: (progress: DownloadProgress) => void;
+    // Case-insensitive fallback for lowercase names
+    caseFallback?: boolean;              // default: false
+    caseFallbackPenalty?: number;        // default: 0.85
     // Inference backend
     backend?: 'local' | 'inference-server';  // default: 'local'
     inferenceServerUrl?: string;   // required if backend='inference-server'
@@ -168,6 +171,17 @@ interface AnonymizerConfig {
 
   // Default anonymization policy
   defaultPolicy?: AnonymizationPolicy;
+
+  // Secrets/credentials detection
+  secrets?: {
+    enabled: boolean;
+    envFiles?: string[];
+    secretKeyPatterns?: RegExp[];
+    minValueLength?: number;        // default: 4
+  };
+
+  // Validation warning callback (silent if omitted)
+  onValidationWarning?: (warnings: Array<{ code: string; message: string }>) => void;
 }
 ```
 
