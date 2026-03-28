@@ -222,11 +222,33 @@ rehydra rehydrate translated.txt -o final.txt
 | `--port <port>` | `-p` | `8787` | Proxy port (`proxy` command) |
 | `--upstream <url>` | | | Custom upstream URL, overrides provider default (`proxy` command) |
 | `--api-key <key>` | | | LLM API key for upstream, or set `LLM_API_KEY` env var (`proxy` command) |
+| `--tag-open <str>` | | `<` | Tag open delimiter |
+| `--tag-close <str>` | | `/>` | Tag close delimiter |
+| `--tag-keyword <str>` | | `PII` | Tag keyword |
 | `--no-color` | | | Disable colored output |
 | `--verbose` | | | Show detection statistics |
 | `--quiet` | `-q` | | Suppress non-essential output |
 | `--help` | `-h` | | Show help |
 | `--version` | `-V` | | Show version |
+
+## Custom Tag Format
+
+By default, placeholders use XML-style tags: `<PII type="EMAIL" id="1"/>`. Use `--tag-open`, `--tag-close`, and `--tag-keyword` to change the format:
+
+```bash
+# Bracket-style: [[PII type="EMAIL" id="1"]]
+rehydra anonymize input.txt --tag-open '[[' --tag-close ']]'
+
+# Custom keyword: {{REDACTED type="EMAIL" id="1"}}
+rehydra anonymize input.txt --tag-open '{{' --tag-close '}}' --tag-keyword REDACTED
+```
+
+The same flags work with `rehydrate`, `inspect`, and `proxy`. Use matching flags during rehydration:
+
+```bash
+rehydra anonymize input.txt -o anon.txt --tag-open '[[' --tag-close ']]'
+rehydra rehydrate anon.txt --tag-open '[[' --tag-close ']]'
+```
 
 ## Output Formats
 

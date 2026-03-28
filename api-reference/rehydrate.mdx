@@ -14,7 +14,9 @@ Replaces PII placeholders with original values.
 ```typescript
 function rehydrate(
   text: string,
-  piiMap: Map<string, string>
+  piiMap: Map<string, string>,
+  strict?: boolean,
+  tagFormat?: TagFormat
 ): string
 ```
 
@@ -26,6 +28,14 @@ function rehydrate(
 
 <ParamField path="piiMap" type="Map<string, string>" required>
   Decrypted PII map from `decryptPIIMap()`
+</ParamField>
+
+<ParamField path="strict" type="boolean" default="false">
+  If `true`, use strict matching (exact tag format only). If `false`, use fuzzy matching that handles mangled tags from translation.
+</ParamField>
+
+<ParamField path="tagFormat" type="TagFormat">
+  Tag format configuration. Must match the format used during anonymization. Defaults to XML-style (`<PII type="..." id="N"/>`).
 </ParamField>
 
 ### Returns
@@ -173,12 +183,20 @@ See [Sessions](/api-reference/sessions) for details.
 
 ## Placeholder Format
 
-Rehydrate expects placeholders in this format:
+By default, rehydrate expects placeholders in XML-style format:
 
 ```xml
 <PII type="TYPE" id="N"/>
 <PII type="TYPE" id="N" gender="..."/>
 <PII type="TYPE" id="N" scope="..."/>
+```
+
+When using a custom tag format, pass the same `tagFormat` used during anonymization:
+
+```typescript
+const tagFormat = { open: '[[', close: ']]' };
+const text = '[[PII type="PERSON" id="1"]] from [[PII type="ORG" id="2"]]';
+const result = rehydrate(text, piiMap, false, tagFormat);
 ```
 
 The function matches based on `type` and `id` attributes.

@@ -33,6 +33,15 @@ Policies shape detection behavior for each call or as a default:
 - ID reuse behavior
 - Leak scanning and semantic masking
 
+### Tag Format
+
+By default, PII placeholders use XML-style tags: `<PII type="EMAIL" id="1"/>`. You can customize the delimiters and keyword:
+
+- `tagFormat.open` / `tagFormat.close` — delimiter characters (e.g., `[[` / `]]`)
+- `tagFormat.keyword` — the keyword inside tags (default: `PII`)
+
+This is useful when XML-style tags conflict with your processing pipeline (e.g., HTML sanitizers, XML parsers) or when you need a format that's less likely to be mangled by translation services.
+
 ### Runtime Integrations
 
 Configuration also covers runtime behavior such as:
@@ -51,6 +60,7 @@ const anonymizer = createAnonymizer({
   mode: 'pseudonymize',
   ner: { mode: 'quantized' },
   semantic: { enabled: false },
+  tagFormat: { open: '[[', close: ']]' }, // optional: bracket-style placeholders
   defaultPolicy: {
     regexEnabledTypes: new Set([PIIType.EMAIL, PIIType.PHONE]),
     nerEnabledTypes: new Set([PIIType.PERSON]),
@@ -75,6 +85,7 @@ It helps to think about configuration in layers:
 - Mode decides reversibility
 - Recognizers decide what can be found
 - Policy decides what should be found right now
+- Tag format decides how placeholders look in output
 - Key and storage settings decide how reversible data is managed
 
 ## Next Steps

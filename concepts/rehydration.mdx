@@ -27,9 +27,9 @@ const restored = rehydrate(textWithPlaceholders, piiMap);
 
 ## What Rehydration Uses
 
-Rehydra matches placeholders such as `<PII type="EMAIL" id="1"/>` against the decrypted map and replaces them with the original values.
+Rehydra matches placeholders such as `<PII type="EMAIL" id="1"/>` (or custom formats like `[[PII type="EMAIL" id="1"]]`) against the decrypted map and replaces them with the original values.
 
-This means the placeholder structure must stay intact between protection and restoration.
+This means the placeholder structure must stay intact between protection and restoration. If you used a custom `tagFormat` during anonymization, pass the same format to `rehydrate()`.
 
 ## Rehydration vs Anonymization
 

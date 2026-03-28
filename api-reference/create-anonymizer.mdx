@@ -117,6 +117,22 @@ function createAnonymizer(config?: AnonymizerConfig): Anonymizer
   </Expandable>
 </ParamField>
 
+<ParamField path="tagFormat" type="TagFormat">
+  Tag format for PII placeholder tags. Controls the delimiters and keyword.
+
+  <Expandable title="TagFormat properties">
+    <ParamField path="open" type="string" default="'<'">
+      Opening delimiter (e.g., `"<"` for XML, `"[["` for bracket style)
+    </ParamField>
+    <ParamField path="close" type="string" default="'/>'">
+      Closing delimiter (e.g., `"/>"` for XML self-closing, `"]]"` for bracket style)
+    </ParamField>
+    <ParamField path="keyword" type="string" default="'PII'">
+      Tag keyword. Allows using e.g., `"REDACTED"` instead of `"PII"`
+    </ParamField>
+  </Expandable>
+</ParamField>
+
 <ParamField path="onValidationWarning" type="(warnings: Array<{ code: string; message: string }>) => void">
   Callback for validation warnings. When not provided, warnings are silently ignored — check `stats.leakScanPassed` in the result instead.
 </ParamField>
@@ -237,6 +253,20 @@ const anonymizer = createAnonymizer({
     inferenceServerUrl: 'http://gpu-server:8000/predict',
   }
 });
+```
+
+### With Custom Tag Format
+
+```typescript
+const anonymizer = createAnonymizer({
+  tagFormat: { open: '[[', close: ']]' }
+});
+
+await anonymizer.initialize();
+
+const result = await anonymizer.anonymize('Contact: test@example.com');
+console.log(result.anonymizedText);
+// "Contact: [[PII type="EMAIL" id="1"]]"
 ```
 
 ### With Custom Thresholds

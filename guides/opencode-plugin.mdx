@@ -67,6 +67,7 @@ export default createRehydraPlugin({
 | `disableTypes` | `string[]` | `["URL", "IP_ADDRESS"]` | PII types to skip — URLs and IP addresses are disabled by default since coding agents routinely work with these values |
 | `locale` | `string` | | Locale hint for anonymization (e.g., `de-DE`) |
 | `policy` | `AnonymizationPolicy` | | Policy overrides for anonymization behavior |
+| `tagFormat` | `TagFormat` | `{ open: "<", close: "/>", keyword: "PII" }` | Tag format for PII placeholders (also available via `anonymizer.tagFormat`) |
 | `anonymizer` | `AnonymizerConfig` | | Advanced: full anonymizer config (overrides `envFiles`, `redactValues`, and `minValueLength`) |
 
 ## What Gets Detected
@@ -128,6 +129,20 @@ Plugin activity is logged to OpenCode's log directory (`~/.local/share/opencode/
 INFO service=rehydra scrubbed={"ENV_VAR_SECRET":2} messageCount=3 scrubbed 2 secret(s) from messages
 INFO service=rehydra tool=bash callID=call_abc123 rehydrated PII tags in tool args
 ```
+
+## Custom Tag Format
+
+Use `tagFormat` to change placeholder delimiters, for example when XML-style tags interfere with your workflow:
+
+```typescript
+import { createRehydraPlugin } from "@rehydra/opencode";
+
+export default createRehydraPlugin({
+  tagFormat: { open: "[[", close: "]]" },
+});
+```
+
+This produces placeholders like `[[PII type="EMAIL" id="1"]]` instead of `<PII type="EMAIL" id="1"/>`.
 
 ## Advanced: Full Anonymizer Config
 
