@@ -15,6 +15,7 @@ Common examples include:
 
 - `EMAIL`
 - `PHONE`
+- `DATE`
 - `IBAN`
 - `BIC_SWIFT`
 - `CREDIT_CARD`
@@ -76,7 +77,7 @@ These are usually added through custom recognizers or policy-level custom patter
 
 | Source | Best for | Examples |
 |--------|----------|----------|
-| Built-in regex recognizers | Stable, well-formed formats | Email, phone, IBAN, credit card |
+| Built-in regex recognizers | Stable, well-formed formats | Email, phone, date, IBAN, credit card |
 | Optional NER model | Meaning-dependent entities | Person, organization, location, address |
 | Secrets recognizers (opt-in) | Credentials and keys | API keys, JWTs, connection strings, private keys |
 | Custom recognizers | Business-specific identifiers | Case IDs, customer IDs, proprietary formats |

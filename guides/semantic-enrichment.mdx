@@ -124,6 +124,50 @@ Supported titles:
 Titles remain visible because they're often important for translation and don't reveal the person's identity on their own.
 </Tip>
 
+## Excluding Location Scopes
+
+When semantic enrichment is enabled, you can selectively skip anonymization of locations by their scope. This is useful when you want to keep country and region names visible while still anonymizing cities and addresses.
+
+```typescript
+const anonymizer = createAnonymizer({
+  ner: { mode: 'quantized' },
+  semantic: { enabled: true },
+  defaultPolicy: {
+    excludeLocationScopes: new Set(['country', 'region']),
+  },
+});
+
+await anonymizer.initialize();
+
+const result = await anonymizer.anonymize(
+  'John Smith lives in Berlin, Germany.'
+);
+console.log(result.anonymizedText);
+// "John Smith lives in <PII type="LOCATION" scope="city" id="1"/>, Germany."
+// Berlin (city) is anonymized, Germany (country) is kept visible
+```
+
+You can also apply this as a per-call override:
+
+```typescript
+await anonymizer.anonymize(text, undefined, {
+  excludeLocationScopes: new Set(['country', 'region']),
+});
+```
+
+Available scopes to exclude:
+
+| Scope | What it covers | Examples |
+|-------|---------------|----------|
+| `city` | Cities and towns | Berlin, Paris, Tokyo |
+| `country` | Countries | Germany, France, Japan |
+| `region` | States, provinces, regions | Bavaria, California |
+| `unknown` | Locations not found in the database | — |
+
+<Note>
+This option requires `semantic: { enabled: true }` because scope classification depends on the GeoNames lookup database. Without semantic enrichment, `excludeLocationScopes` is silently ignored.
+</Note>
+
 ## Locale Hints
 
 Improve detection accuracy with locale hints:

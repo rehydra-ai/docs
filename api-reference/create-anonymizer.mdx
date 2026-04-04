@@ -301,6 +301,23 @@ const anonymizer = createAnonymizer({
 });
 ```
 
+### Excluding Countries and Regions
+
+```typescript
+const anonymizer = createAnonymizer({
+  ner: { mode: 'quantized' },
+  semantic: { enabled: true },
+  defaultPolicy: {
+    excludeLocationScopes: new Set(['country', 'region']),
+  },
+});
+
+await anonymizer.initialize();
+
+const result = await anonymizer.anonymize('Meeting in Berlin, Germany.');
+// "Meeting in <PII type="LOCATION" scope="city" id="1"/>, Germany."
+```
+
 ## Related
 
 - [anonymize](/api-reference/anonymize) - The anonymize method

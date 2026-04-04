@@ -216,6 +216,11 @@ await anonymizer.anonymize('Email: test@example.com', undefined, {
   enabledTypes: new Set([PIIType.PHONE]),  // Only detect phones
   allowlistTerms: new Set(['test@example.com']),  // Ignore this email
 });
+
+// Keep countries visible (requires semantic: { enabled: true })
+await anonymizer.anonymize('Meeting in Berlin, Germany.', undefined, {
+  excludeLocationScopes: new Set(['country', 'region']),
+});
 ```
 
 ---
